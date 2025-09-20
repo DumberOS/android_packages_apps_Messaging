@@ -171,6 +171,9 @@ public class ConversationListItemView extends FrameLayout implements OnClickList
         if (OsUtil.isAtLeastL()) {
             setTransitionGroup(true);
         }
+
+        setOnClickListener(this);
+        setOnLongClickListener(this);
     }
 
     @Override
@@ -626,7 +629,8 @@ public class ConversationListItemView extends FrameLayout implements OnClickList
     }
 
     private boolean processClick(final View v, final boolean isLongClick) {
-        Assert.isTrue(v == mSwipeableContainer || v == mContactIconView || v == mImagePreviewView);
+        Assert.isTrue(v == this || v == mSwipeableContainer || v == mContactIconView
+                || v == mImagePreviewView);
         Assert.notNull(mData.getName());
 
         if (mHostInterface != null) {
