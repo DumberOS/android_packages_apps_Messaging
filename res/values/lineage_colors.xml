@@ -19,6 +19,7 @@
     <color name="lineage_accent">@*android:color/system_accent1_600</color>
 
     <color name="window_background">@*android:color/system_neutral1_50</color>
+    <color name="control_highlight_color">#1F000000</color>
 
     <color name="button_text">@*android:color/system_neutral1_900</color>
 
