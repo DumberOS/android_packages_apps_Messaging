@@ -18,7 +18,9 @@ package com.android.messaging.ui.conversationlist;
 import android.content.Context;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -133,6 +135,8 @@ public class ConversationListItemView extends FrameLayout implements OnClickList
     private AsyncImageView mImagePreviewView;
     private AudioAttachmentView mAudioAttachmentView;
     private HostInterface mHostInterface;
+    private final Paint mFocusHighlightPaint = new Paint();
+    private int mFocusHighlightColor;
 
     public ConversationListItemView(final Context context, final AttributeSet attrs) {
         super(context, attrs);
@@ -164,6 +168,8 @@ public class ConversationListItemView extends FrameLayout implements OnClickList
         final Resources resources = getContext().getResources();
         mListItemReadColor = resources.getColor(R.color.conversation_list_item_read);
         mListItemUnreadColor = resources.getColor(R.color.conversation_list_item_unread);
+        mFocusHighlightColor = resources.getColor(R.color.control_highlight_color);
+        mFocusHighlightPaint.setColor(mFocusHighlightColor);
 
         mListItemReadTypeface = Typefaces.getRobotoNormal();
         mListItemUnreadTypeface = Typefaces.getRobotoBold();
@@ -174,6 +180,14 @@ public class ConversationListItemView extends FrameLayout implements OnClickList
 
         setOnClickListener(this);
         setOnLongClickListener(this);
+    }
+
+    @Override
+    protected void dispatchDraw(final Canvas canvas) {
+        if (hasFocus()) {
+            canvas.drawRect(0, 0, getWidth(), getHeight(), mFocusHighlightPaint);
+        }
+        super.dispatchDraw(canvas);
     }
 
     @Override
