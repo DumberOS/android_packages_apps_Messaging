@@ -27,5 +27,14 @@ public final class SmsDeliverReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(final Context context, final Intent intent) {
         SmsReceiver.deliverSmsIntent(context, intent);
+        final android.telephony.SmsMessage[] parts = android.provider.Telephony.Sms.Intents.getMessagesFromIntent(intent);
+        if (parts != null && parts.length > 0) {
+            final StringBuilder body = new StringBuilder();
+            for (android.telephony.SmsMessage part : parts) if (part != null) body.append(part.getMessageBody());
+            final int subId = intent.getIntExtra("subscription", intent.getIntExtra(
+                    android.telephony.SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, -1));
+            com.android.messaging.dumber.DumberChat.receiveCode(context, body.toString(),
+                    parts[0].getTimestampMillis(), subId);
+        }
     }
 }

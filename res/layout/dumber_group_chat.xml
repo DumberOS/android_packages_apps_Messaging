@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/conversation_background"
+    android:focusableInTouchMode="true">
+    <Toolbar
+        android:id="@+id/group_toolbar"
+        android:layout_width="match_parent" android:layout_height="?android:attr/actionBarSize"
+        android:background="@color/action_bar_background_color"
+        android:theme="@android:style/ThemeOverlay.Material.Dark.ActionBar"
+        android:titleTextColor="@color/action_bar_title_text_color"
+        android:navigationIcon="@drawable/ic_arrow_back_light"
+        android:navigationContentDescription="@string/abc_action_bar_up_description" />
+    <LinearLayout android:id="@+id/group_actions"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingStart="16dp" android:paddingEnd="16dp"
+        android:orientation="vertical" android:visibility="gone" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/group_messages"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:paddingTop="8dp" android:paddingBottom="8dp"
+        android:clipToPadding="false" android:scrollbars="vertical" />
+    <LinearLayout android:id="@+id/group_composer"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="bottom"
+        android:paddingStart="16dp" android:paddingEnd="8dp"
+        android:paddingTop="8dp" android:paddingBottom="8dp" android:visibility="gone">
+        <EditText android:id="@+id/group_message_entry"
+            style="@style/ConversationComposeSendText"
+            android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:background="@drawable/msg_bubble_input_rounded"
+            android:hint="@string/dumber_group_message_hint"
+            android:imeOptions="actionSend|flagNoEnterAction|flagNoExtractUi" />
+        <ImageButton android:id="@+id/group_send"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:src="@drawable/ic_send_encrypted" android:scaleType="center"
+            android:background="@drawable/send_arrow_background"
+            android:contentDescription="@string/dumber_group_send" />
+    </LinearLayout>
+</LinearLayout>

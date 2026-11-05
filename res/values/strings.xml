@@ -974,4 +974,6 @@
 
     <!-- When making a call to emergency numbers, show this toast -->
     <string name="disallow_emergency_call">Can\'t make a voice call to emergency services here.</string>
+    <string name="message_transport">Message transport</string>
+    <string name="message_transport_queued">Message transport (%1$d queued)</string>
 </resources>

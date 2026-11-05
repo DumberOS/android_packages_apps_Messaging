@@ -31,6 +31,8 @@ import com.android.messaging.datamodel.data.SubscriptionListData;
 import com.android.messaging.datamodel.data.SubscriptionListData.SubscriptionListEntry;
 import com.android.messaging.util.UiUtils;
 
+import com.android.messaging.dumber.ChatComposeState;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -48,6 +50,7 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
     private boolean mShow;
     private SimSelectorViewListener mListener;
     private int mItemLayoutId;
+    private Map<Integer, ChatComposeState> mChatTransports;
 
     public SimSelectorView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -71,6 +74,11 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
 
     public void bind(final SubscriptionListData data) {
         mAdapter.bindData(data.getActiveSubscriptionEntriesExcludingDefault());
+    }
+
+    public void setChatTransports(final Map<Integer, ? extends ChatComposeState> transports) {
+        mChatTransports = new java.util.HashMap<>(transports);
+        mAdapter.notifyDataSetChanged();
     }
 
     public void setItemLayoutId(final int layoutId) {
@@ -152,7 +160,15 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
                         parent, false);
                 itemView.setHostInterface(SimSelectorView.this);
             }
-            itemView.bind(getItem(position));
+            final SubscriptionListEntry entry = getItem(position);
+            itemView.bind(entry);
+            if (mChatTransports != null) {
+                final ChatComposeState transport = mChatTransports.getOrDefault(
+                        entry.subscriptionId, ChatComposeState.CHECKING);
+                itemView.setTransportLabel(transport.getLabel());
+            } else {
+                itemView.setTransportLabel(null);
+            }
             return itemView;
         }
     }

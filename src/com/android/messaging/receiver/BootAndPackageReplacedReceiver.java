@@ -40,6 +40,7 @@ public class BootAndPackageReplacedReceiver extends BroadcastReceiver {
             UpdateMessageNotificationAction.updateMessageNotification();
 
             BugleApplication.updateAppConfig(context);
+            com.android.messaging.dumber.DumberChat.resume(context);
         } else {
             LogUtil.i(LogUtil.BUGLE_TAG, "BootAndPackageReplacedReceiver got unexpected action: "
                     + intent.getAction());

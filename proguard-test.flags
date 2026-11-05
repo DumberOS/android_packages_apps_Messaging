@@ -39,3 +39,7 @@
 -keep class com.vladium.** { *; }
 
 # End of Test Rules
+
+# dumber.chat instrumentation exercises typed records and isolated Keystore storage.
+-keep class com.android.messaging.dumber.** { *; }
+-keep class chat.dumber.sdk.** { *; }

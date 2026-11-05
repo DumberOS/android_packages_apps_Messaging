@@ -559,15 +559,15 @@ public class BugleDatabaseOperations {
         final MessageData message = readMessage(dbWrapper, messageId);
         addSnippetTextAndPreviewToContentValues(message, false /* showDraft */, values);
 
-        if (shouldAutoSwitchSelfId) {
-            addSelfIdAutoSwitchInfoToContentValues(dbWrapper, message, conversationId, values);
-        }
+        final boolean selfIdChanged = shouldAutoSwitchSelfId &&
+                addSelfIdAutoSwitchInfoToContentValues(dbWrapper, message, conversationId, values);
 
         // Conversation always exists as this method is called from ActionService only after
         // reading and if necessary creating the conversation.
         updateConversationRow(dbWrapper, conversationId, values);
 
-        if (shouldAutoSwitchSelfId && OsUtil.isAtLeastL_MR1()) {
+        // Outgoing sync and unchanged incoming SIMs must not overwrite an unsaved UI selection.
+        if (selfIdChanged) {
             // Normally, the draft message compose UI trusts its UI state for providing up-to-date
             // conversation self id. Therefore, notify UI through local broadcast receiver about
             // this external change so the change can be properly reflected.

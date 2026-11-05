@@ -117,6 +117,7 @@ public class BugleApplication extends Application implements UncaughtExceptionHa
         ApnDatabase.initializeAppContext(context);
         // Fixup messages in flight if we crashed and send any pending
         dataModel.onApplicationCreated();
+        com.android.messaging.dumber.ChatHost.install(context);
         // Register carrier config change receiver
         if (OsUtil.isAtLeastM()) {
             registerCarrierConfigChangeReceiver(context);

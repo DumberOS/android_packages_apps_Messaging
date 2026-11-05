@@ -55,18 +55,18 @@ public class FrequentContactsCursorBuilderTest extends BugleTestCase {
 
     public void testIncompleteBuild() {
         final FrequentContactsCursorBuilder builder = new FrequentContactsCursorBuilder();
-        assertNull(builder.build());
-        assertNull(builder.setFrequents(TestDataFactory.getStrequentContactsCursor()).build());
+        assertNull(builder.build(false));
+        assertNull(builder.setFrequents(TestDataFactory.getStrequentContactsCursor()).build(false));
         builder.resetBuilder();
-        assertNull(builder.build());
-        assertNull(builder.setAllContacts(TestDataFactory.getAllContactListCursor()).build());
+        assertNull(builder.build(false));
+        assertNull(builder.setAllContacts(TestDataFactory.getAllContactListCursor()).build(false));
     }
 
     public void testBuildOnce() {
         final Cursor cursor = new FrequentContactsCursorBuilder()
             .setAllContacts(TestDataFactory.getAllContactListCursor())
             .setFrequents(TestDataFactory.getStrequentContactsCursor())
-            .build();
+            .build(false);
         assertNotNull(cursor);
         verifyBuiltCursor(TestDataFactory.getFrequentContactListCursor(), cursor);
     }
@@ -76,15 +76,15 @@ public class FrequentContactsCursorBuilderTest extends BugleTestCase {
         final Cursor firstCursor = builder
             .setAllContacts(TestDataFactory.getAllContactListCursor())
             .setFrequents(TestDataFactory.getStrequentContactsCursor())
-            .build();
+            .build(false);
         assertNotNull(firstCursor);
         builder.resetBuilder();
-        assertNull(builder.build());
+        assertNull(builder.build(false));
 
         final Cursor secondCursor = builder
                 .setAllContacts(TestDataFactory.getAllContactListCursor())
                 .setFrequents(TestDataFactory.getStrequentContactsCursor())
-                .build();
+                .build(false);
         assertNotNull(firstCursor);
         verifyBuiltCursor(TestDataFactory.getFrequentContactListCursor(), secondCursor);
     }

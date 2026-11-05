@@ -101,6 +101,14 @@ public class ApplicationSettingsActivity extends BugleActionBarActivity {
 
             getPreferenceManager().setSharedPreferencesName(BuglePrefs.SHARED_PREFERENCES_NAME);
             addPreferencesFromResource(R.xml.preferences_application);
+            final Preference chat = new Preference(getActivity());
+            chat.setTitle("dumber.chat");
+            chat.setSummary("Encrypted messaging, connected numbers and devices");
+            chat.setOnPreferenceClickListener(p -> {
+                com.android.messaging.dumber.DumberChat.openSettings(getActivity());
+                return true;
+            });
+            getPreferenceScreen().addPreference(chat);
 
             mNotificationsPreferenceKey =
                     getString(R.string.notifications_pref_key);

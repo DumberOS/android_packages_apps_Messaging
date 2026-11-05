@@ -95,6 +95,14 @@ public class InsertNewMessageAction extends Action implements Parcelable {
         actionParameters.putParcelable(KEY_MESSAGE, message);
     }
 
+    /** Explicitly confirmed carrier fallback; token prevents normal send interception. */
+    public static void insertCarrierMessage(final String id, final int subId,
+            final String recipient, final String text) {
+        final InsertNewMessageAction action = new InsertNewMessageAction(subId, recipient, text, null);
+        action.actionParameters.putString("dumber_carrier_id", id);
+        action.start();
+    }
+
     private InsertNewMessageAction(final MessageData message, final int subId) {
         super();
         actionParameters.putParcelable(KEY_MESSAGE, message);
@@ -118,6 +126,22 @@ public class InsertNewMessageAction extends Action implements Parcelable {
      */
     @Override
     protected Object executeAction() {
+        try {
+            return executeMessage();
+        } catch (RuntimeException error) {
+            final Context context = Factory.get().getApplicationContext();
+            final String id = actionParameters.getString("dumber_carrier_id");
+            if (id == null) throw error;
+            com.android.messaging.dumber.DumberChat.carrierFailed(context, id,
+                    error.getMessage() == null ? "Unable to hand off SMS" : error.getMessage());
+            return null;
+        }
+    }
+
+    private Object executeMessage() {
+        final String carrierId = actionParameters.getString("dumber_carrier_id");
+        final Context app = Factory.get().getApplicationContext();
+        if (carrierId != null && !com.android.messaging.dumber.DumberChat.carrierPending(app, carrierId)) return null;
         MessageData message = actionParameters.getParcelable(KEY_MESSAGE);
         if (message == null) {
             LogUtil.i(TAG, "InsertNewMessageAction: Creating MessageData with provided data");
@@ -155,6 +179,32 @@ public class InsertNewMessageAction extends Action implements Parcelable {
 
         // TODO: Work out whether to send with SMS or MMS (taking into account recipients)?
         final boolean isSms = (message.getProtocol() == MessageData.PROTOCOL_SMS);
+        if (carrierId == null && recipients.size() == 1) {
+            final boolean encrypted;
+            try {
+                encrypted = com.android.messaging.dumber.DumberChat.intercept(app, recipients.get(0),
+                        message.getMessageText(), conversationId, subId,
+                        message.getFirstAttachment() != null || !TextUtils.isEmpty(message.getMmsSubject()));
+            } catch (RuntimeException error) {
+                BugleDatabaseOperations.updateDraftMessageData(db, conversationId, message,
+                        BugleDatabaseOperations.UPDATE_MODE_ADD_DRAFT);
+                MessagingContentProvider.notifyConversationListChanged();
+                com.android.messaging.dumber.DumberChat.sendFailed(app,
+                        error.getMessage() == null ? "Unable to queue encrypted message" : error.getMessage());
+                return null;
+            }
+            if (encrypted) {
+                // Keep the selected SIM when clearing the draft. Encrypted sends are later
+                // imported through provider sync, which must not restore an older SIM choice.
+                final MessageData emptyDraft = MessageData.createDraftSmsMessage(
+                        conversationId, self.getId(), "");
+                BugleDatabaseOperations.updateDraftMessageData(db, conversationId, emptyDraft,
+                        BugleDatabaseOperations.UPDATE_MODE_CLEAR_DRAFT);
+                MessagingContentProvider.notifyConversationListChanged();
+                MessagingContentProvider.notifyMessagesChanged(conversationId);
+                return message;
+            }
+        }
         if (isSms) {
             String sendingConversationId = conversationId;
             if (recipients.size() > 1) {
@@ -169,8 +219,11 @@ public class InsertNewMessageAction extends Action implements Parcelable {
 
             for (final String recipient : recipients) {
                 // Start actual sending
-                insertSendingSmsMessage(message, subId, recipient,
+                final MessageData inserted = insertSendingSmsMessage(message, subId, recipient,
                         timestamp, sendingConversationId);
+                if (carrierId != null && inserted != null) {
+                    com.android.messaging.dumber.DumberChat.carrierDone(app, carrierId);
+                }
             }
 
             // Can now clear draft from conversation (deleting attachments if necessary)
@@ -376,7 +429,10 @@ public class InsertNewMessageAction extends Action implements Parcelable {
         final String messageText = content.getMessageText();
 
         // Insert message into telephony database sms message table
-        final Uri messageUri = MmsUtils.insertSmsMessage(context,
+        final String carrierId = actionParameters.getString("dumber_carrier_id");
+        final Uri messageUri = carrierId != null
+                ? com.android.messaging.dumber.DumberChat.carrierUri(context, carrierId, threadId, timestamp)
+                : MmsUtils.insertSmsMessage(context,
                 Telephony.Sms.CONTENT_URI,
                 subId,
                 recipient,
@@ -385,6 +441,10 @@ public class InsertNewMessageAction extends Action implements Parcelable {
                 Telephony.Sms.STATUS_NONE,
                 Telephony.Sms.MESSAGE_TYPE_SENT, threadId);
 
+        if (carrierId != null && messageUri != null) {
+            final MessageData existing = BugleDatabaseOperations.readMessageData(db, messageUri);
+            if (existing != null) return existing;
+        }
         MessageData message = null;
         if (messageUri != null && !TextUtils.isEmpty(messageUri.toString())) {
             db.beginTransaction();

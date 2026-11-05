@@ -19,6 +19,10 @@ package com.android.messaging.datamodel.data;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import com.android.messaging.Factory;
+import com.android.messaging.datamodel.BugleDatabaseOperations;
+import com.android.messaging.datamodel.DataModel;
+import com.android.messaging.dumber.DumberChat;
 import com.android.messaging.datamodel.MessageTextStats;
 import com.android.messaging.datamodel.action.ReadDraftDataAction;
 import com.android.messaging.datamodel.action.ReadDraftDataAction.ReadDraftDataActionListener;
@@ -760,11 +764,16 @@ public class DraftMessageData extends BindableData implements ReadDraftDataActio
         public static final int RESULT_MESSAGE_OVER_LIMIT = 3;
         public static final int RESULT_VIDEO_ATTACHMENT_LIMIT_EXCEEDED = 4;
         public static final int RESULT_SIM_NOT_READY = 5;
+        public static final int RESULT_ENCRYPTED_CONTENT_UNSUPPORTED = 6;
+        public static final int RESULT_TRANSPORT_CHECK_FAILED = 7;
+        public static final int RESULT_DRAFT_CHANGED = 8;
         private final boolean mCheckMessageSize;
         private final int mSelfSubId;
         private final CheckDraftTaskCallback mCallback;
         private final String mBindingId;
         private final List<MessagePartData> mAttachmentsCopy;
+        private final String mSubjectCopy;
+        private final String mSelfIdCopy;
         private int mPreExecuteResult = RESULT_PASSED;
 
         public CheckDraftForSendTask(final boolean checkMessageSize, final int selfSubId,
@@ -776,6 +785,8 @@ public class DraftMessageData extends BindableData implements ReadDraftDataActio
             // Obtain an immutable copy of the attachment list so we can operate on it in the
             // background thread.
             mAttachmentsCopy = new ArrayList<MessagePartData>(mAttachments);
+            mSubjectCopy = mMessageSubject;
+            mSelfIdCopy = mSelfId;
 
             mCheckDraftForSendTask = this;
         }
@@ -812,6 +823,21 @@ public class DraftMessageData extends BindableData implements ReadDraftDataActio
                 return mPreExecuteResult;
             }
 
+            if (!TextUtils.isEmpty(mSubjectCopy) || !mAttachmentsCopy.isEmpty()) {
+                try {
+                    final ArrayList<String> recipients =
+                            BugleDatabaseOperations.getRecipientsForConversation(
+                                    DataModel.get().getDatabase(), mConversationId);
+                    if (recipients.isEmpty()) return RESULT_TRANSPORT_CHECK_FAILED;
+                    if (recipients.size() == 1 && !DumberChat.canSendCarrierContent(
+                            Factory.get().getApplicationContext(), recipients.get(0), mSelfSubId)) {
+                        return RESULT_ENCRYPTED_CONTENT_UNSUPPORTED;
+                    }
+                } catch (RuntimeException error) {
+                    return RESULT_TRANSPORT_CHECK_FAILED;
+                }
+            }
+
             if (mCheckMessageSize && getIsMessageOverLimit()) {
                 return RESULT_MESSAGE_OVER_LIMIT;
             }
@@ -823,6 +849,13 @@ public class DraftMessageData extends BindableData implements ReadDraftDataActio
             mCheckDraftForSendTask = null;
             // Only call back if we are bound to the original binding.
             if (isBound(mBindingId) && !isCancelled()) {
+                // Recheck the transport-relevant inputs before consuming the draft. A subject
+                // added while the background check runs must not bypass the MMS guard.
+                if (!TextUtils.equals(mSubjectCopy, mMessageSubject)
+                        || !TextUtils.equals(mSelfIdCopy, mSelfId)
+                        || !mAttachmentsCopy.equals(mAttachments)) {
+                    result = RESULT_DRAFT_CHANGED;
+                }
                 mCallback.onDraftChecked(DraftMessageData.this, result);
             } else {
                 if (!isBound(mBindingId)) {

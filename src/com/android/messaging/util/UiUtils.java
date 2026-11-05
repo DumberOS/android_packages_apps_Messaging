@@ -46,6 +46,7 @@ import android.widget.Toast;
 
 import com.android.messaging.Factory;
 import com.android.messaging.R;
+import com.android.messaging.datamodel.data.ParticipantData;
 import com.android.messaging.ui.SnackBar;
 import com.android.messaging.ui.SnackBar.Placement;
 import com.android.messaging.ui.conversationlist.ConversationListActivity;
@@ -338,14 +339,19 @@ public class UiUtils {
      * @return true if all conditions are nominal and we're ready to send a message
      */
     public static boolean isReadyForAction() {
+        return isReadyForAction(ParticipantData.DEFAULT_SELF_SUB_ID);
+    }
+
+    /** A SIM explicitly selected in the conversation does not need a system SMS default. */
+    public static boolean isReadyForAction(final int selectedSubId) {
         final PhoneUtils phoneUtils = PhoneUtils.getDefault();
 
         // Have all the conditions been met:
         // Supports SMS?
-        // Has a preferred sim?
+        // Has a conversation SIM or a system SMS default?
         // Is the default sms app?
         return phoneUtils.isSmsCapable() &&
-                phoneUtils.getHasPreferredSmsSim() &&
+                (selectedSubId >= 0 || phoneUtils.getHasPreferredSmsSim()) &&
                 phoneUtils.isDefaultSmsApp();
     }
 

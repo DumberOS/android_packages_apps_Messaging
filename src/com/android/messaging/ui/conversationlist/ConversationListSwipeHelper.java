@@ -100,7 +100,8 @@ public class ConversationListSwipeHelper implements OnItemTouchListener {
                     mInitialY = event.getY();
 
                     final View viewAtPoint = mRecyclerView.findChildViewUnder(mInitialX, mInitialY);
-                    final ConversationListItemView child = (ConversationListItemView) viewAtPoint;
+                    final ConversationListItemView child = viewAtPoint instanceof ConversationListItemView
+                            ? (ConversationListItemView) viewAtPoint : null;
                     if (viewAtPoint instanceof ConversationListItemView &&
                             child != null && child.isSwipeAnimatable()) {
                         // Begin detecting swipe on the target for the rest of the gesture.

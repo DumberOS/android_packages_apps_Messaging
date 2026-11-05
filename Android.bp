@@ -53,7 +53,11 @@ messaging_java_defaults {
 android_app {
     name: "messaging",
 
-    srcs: ["src/**/*.java"],
+    srcs: ["src/**/*.java", "src/**/*.kt"],
+    compile_multilib: "both",
+    jni_libs: ["libdumber_chat_core"],
+    use_embedded_native_libs: true,
+    min_sdk_version: "34",
 
     defaults: ["messaging_defaults"],
 
@@ -78,6 +82,8 @@ android_app {
         "com.android.vcard",
         "guava",
         "libphonenumber",
+        "dumber-chat-sdk",
+        "dumber-call-api",
     ],
 
     aaptflags: [
@@ -102,10 +108,41 @@ android_app {
     product_specific: true,
 }
 
+java_library {
+    name: "dumber-chat-sdk",
+    srcs: ["vendor/dumber-chat-core/bindings/kotlin/src/main/kotlin/**/*.kt"],
+    sdk_version: "current",
+    min_sdk_version: "23",
+    static_libs: ["kotlin-stdlib"],
+}
+
+cc_prebuilt_library_shared {
+    name: "libdumber_chat_core",
+    arch: {
+        arm64: { srcs: ["native/arm64-v8a/libdumber_chat_core.so"] },
+        arm: { srcs: ["native/armeabi-v7a/libdumber_chat_core.so"] },
+    },
+    compile_multilib: "both",
+    sdk_version: "23",
+    min_sdk_version: "23",
+    stl: "none",
+    strip: { none: true },
+    check_elf_files: false,
+    product_specific: true,
+}
+
 prebuilt_etc {
     name: "com.android.messaging.allowlist",
     product_specific: true,
     sub_dir: "sysconfig",
     src: "com.android.messaging.allowlist.xml",
     filename_from_src: true,
+}
+
+java_library {
+    name: "dumber-call-api",
+    srcs: ["call-api/**/*.java", "call-api/**/*.aidl"],
+    aidl: { local_include_dirs: ["call-api"] },
+    sdk_version: "current",
+    min_sdk_version: "34",
 }

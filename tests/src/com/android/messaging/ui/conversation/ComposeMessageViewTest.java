@@ -95,6 +95,22 @@ public class ComposeMessageViewTest extends ViewTest<ComposeMessageView> {
     }
 
     public void testSend() {
+        checkSendResult(CheckDraftForSendTask.RESULT_PASSED);
+    }
+
+    public void testUnsupportedEncryptedContentKeepsDraft() {
+        checkSendResult(CheckDraftForSendTask.RESULT_ENCRYPTED_CONTENT_UNSUPPORTED);
+    }
+
+    public void testFailedTransportCheckKeepsDraft() {
+        checkSendResult(CheckDraftForSendTask.RESULT_TRANSPORT_CHECK_FAILED);
+    }
+
+    public void testChangedDraftIsNotConsumed() {
+        checkSendResult(CheckDraftForSendTask.RESULT_DRAFT_CHANGED);
+    }
+
+    private void checkSendResult(final int result) {
         Mockito.when(mockDraftMessageData.getReadOnlyAttachments())
                 .thenReturn(Collections.unmodifiableList(new ArrayList<MessagePartData>()));
         Mockito.when(mockDraftMessageData.getIsDefaultSmsApp()).thenReturn(true);
@@ -111,12 +127,14 @@ public class ComposeMessageViewTest extends ViewTest<ComposeMessageView> {
                 Matchers.<BindingBase<DraftMessageData>>any()))
                 .thenReturn(message);
         Mockito.when(mockDraftMessageData.hasPendingAttachments()).thenReturn(false);
+        final String subject = result == CheckDraftForSendTask.RESULT_PASSED ? "" : "Subject";
+        Mockito.when(mockDraftMessageData.getMessageSubject()).thenReturn(subject);
         Mockito.doAnswer(new Answer() {
             @Override
             public Object answer(InvocationOnMock invocation) throws Throwable {
                 // Synchronously pass the draft check and callback.
                 ((CheckDraftTaskCallback)invocation.getArguments()[2]).onDraftChecked(
-                        mockDraftMessageData, CheckDraftForSendTask.RESULT_PASSED);
+                        mockDraftMessageData, result);
                 return null;
             }
         }).when(mockDraftMessageData).checkDraftForAction(Mockito.anyBoolean(), Mockito.anyInt(),
@@ -135,14 +153,55 @@ public class ComposeMessageViewTest extends ViewTest<ComposeMessageView> {
 
         view.onDraftChanged(mockDraftMessageData, DraftMessageData.ALL_CHANGED);
 
-        assertEquals(message.getMessageText(), composeEditText.getText().toString());
+        final String visibleText = subject.isEmpty() ? message.getMessageText() :
+                subject + "\n\n" + message.getMessageText();
+        assertEquals(visibleText, composeEditText.getText().toString());
+        Mockito.verify(mockDraftMessageData, Mockito.atLeastOnce()).setMessageSubject(null);
 
         sendButton.performClick();
+        if (result != CheckDraftForSendTask.RESULT_PASSED) {
+            Mockito.verify(mockDraftMessageData, Mockito.never()).prepareMessageForSending(
+                    Matchers.<BindingBase<DraftMessageData>>any());
+            Mockito.verify(mockIComposeMessageViewHost, Mockito.never()).sendMessage(
+                    Mockito.any(MessageData.class));
+            assertEquals(visibleText, composeEditText.getText().toString());
+            return;
+        }
         Mockito.verify(mockIComposeMessageViewHost).sendMessage(
                 Mockito.argThat(o -> {
                     assertEquals(message.getMessageText(), o.getMessageText());
                     return true;
                 }));
+    }
+
+    public void testTransportSwitchKeepsDraftAndUpdatesIndicators() {
+        Mockito.when(mockDraftMessageData.getReadOnlyAttachments())
+                .thenReturn(Collections.emptyList());
+        Mockito.when(mockDraftMessageData.isBound(Matchers.anyString())).thenReturn(true);
+        Mockito.when(mockDraftMessageData.getMessageText()).thenReturn("Unsent message");
+        Mockito.when(mockDraftMessageData.getCodePointsRemainingInCurrentMessage()).thenReturn(5);
+        Mockito.when(mockDraftMessageData.getNumMessagesToBeSent()).thenReturn(1);
+        final ComposeMessageView view = getView();
+        view.bind(mockDraftMessageData, mockIComposeMessageViewHost);
+        view.onDraftChanged(mockDraftMessageData, DraftMessageData.ALL_CHANGED);
+        final EditText input = view.findViewById(R.id.compose_message_text);
+        final View send = view.findViewById(R.id.send_message_button);
+        final View counter = view.findViewById(R.id.message_body_size);
+        input.setSelection(3);
+        view.setChatTransport(com.android.messaging.dumber.ChatComposeState.ENCRYPTED);
+        assertEquals("Encrypted message", input.getHint().toString());
+        assertEquals("Send encrypted message", send.getContentDescription().toString());
+        assertEquals(View.INVISIBLE, counter.getVisibility());
+        view.setChatTransport(com.android.messaging.dumber.ChatComposeState.CHECKING);
+        assertEquals("Checking encryption…", input.getHint().toString());
+        assertFalse("Send encrypted message".equals(send.getContentDescription().toString()));
+        view.setChatTransport(com.android.messaging.dumber.ChatComposeState.SMS);
+        assertEquals("Text message", input.getHint().toString());
+        assertEquals("Send text message", send.getContentDescription().toString());
+        assertEquals(View.VISIBLE, counter.getVisibility());
+        assertEquals("Unsent message", input.getText().toString());
+        assertEquals(3, input.getSelectionStart());
+        Mockito.verify(mockIComposeMessageViewHost, Mockito.never()).sendMessage(Mockito.any(MessageData.class));
     }
 
     public void testNotDefaultSms() {

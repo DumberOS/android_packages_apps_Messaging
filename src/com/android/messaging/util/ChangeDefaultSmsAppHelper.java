@@ -37,6 +37,7 @@ public class ChangeDefaultSmsAppHelper {
      * call warnOfMissingActionConditions to put up a toast and allow the user to repair
      * that condition.
      * @param sending - true if we're called during a sending operation
+     * @param selectedSubId - conversation SIM, or a negative value for the system default
      * @param runAfterMadeDefault - a runnable to run after the user responds
      *                  positively to the condition prompt and resolves the condition. It is
      *                  preferable to specify the value in {@link #handleChangeDefaultSmsResult}
@@ -48,20 +49,20 @@ public class ChangeDefaultSmsAppHelper {
      * @param fragment - calling fragment, may be null if called directly from an activity
      */
     public void warnOfMissingActionConditions(final boolean sending,
-            final Runnable runAfterMadeDefault,
+            final int selectedSubId, final Runnable runAfterMadeDefault,
             final View composeView, final View rootView,
             final Activity activity, final Fragment fragment) {
         final PhoneUtils phoneUtils = PhoneUtils.getDefault();
         final boolean isSmsCapable = phoneUtils.isSmsCapable();
-        final boolean hasPreferredSmsSim = phoneUtils.getHasPreferredSmsSim();
+        final boolean hasSmsSim = selectedSubId >= 0 || phoneUtils.getHasPreferredSmsSim();
         final boolean isDefaultSmsApp = phoneUtils.isDefaultSmsApp();
 
         // Supports SMS?
         if (!isSmsCapable) {
             UiUtils.showToast(R.string.sms_disabled);
 
-        // Has a preferred sim?
-        } else if (!hasPreferredSmsSim) {
+        // Has a conversation SIM or a system SMS default?
+        } else if (!hasSmsSim) {
             UiUtils.showToast(R.string.no_preferred_sim_selected);
 
         // Is the default sms app?
@@ -73,7 +74,7 @@ public class ChangeDefaultSmsAppHelper {
 
         LogUtil.w(LogUtil.BUGLE_TAG, "Unsatisfied action condition: "
                 + "isSmsCapable=" + isSmsCapable + ", "
-                + "hasPreferredSmsSim=" + hasPreferredSmsSim + ", "
+                + "hasSmsSim=" + hasSmsSim + ", "
                 + "isDefaultSmsApp=" + isDefaultSmsApp);
     }
 

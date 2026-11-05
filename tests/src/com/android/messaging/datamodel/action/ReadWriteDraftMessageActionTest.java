@@ -17,6 +17,7 @@
 package com.android.messaging.datamodel.action;
 
 import android.content.ContentProvider;
+import android.content.ContentValues;
 import android.content.pm.ProviderInfo;
 import android.database.Cursor;
 import android.net.Uri;
@@ -27,6 +28,7 @@ import androidx.test.filters.SmallTest;
 import com.android.messaging.BugleTestCase;
 import com.android.messaging.FakeContext;
 import com.android.messaging.FakeFactory;
+import com.android.messaging.Factory;
 import com.android.messaging.datamodel.BugleDatabaseOperations;
 import com.android.messaging.datamodel.DataModel;
 import com.android.messaging.datamodel.DatabaseHelper;
@@ -42,8 +44,11 @@ import com.android.messaging.datamodel.data.MessageData;
 import com.android.messaging.datamodel.data.MessagePartData;
 import com.android.messaging.datamodel.data.ParticipantData;
 import com.android.messaging.util.ContentType;
+import com.android.messaging.util.PhoneUtils;
+import com.android.messaging.ui.UIIntents;
 
 import org.mockito.Mock;
+import org.mockito.Mockito;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -450,6 +455,79 @@ public class ReadWriteDraftMessageActionTest extends BugleTestCase {
         } catch (final FileNotFoundException e) {
         }
 
+    }
+
+    private static String insertActiveSelf(final DatabaseWrapper db, final int subId,
+            final int slot) {
+        final ContentValues values = new ContentValues();
+        values.put(DatabaseHelper.ParticipantColumns.SUB_ID, subId);
+        values.put(DatabaseHelper.ParticipantColumns.SIM_SLOT_ID, slot);
+        return Long.toString(db.insert(DatabaseHelper.PARTICIPANTS_TABLE, null, values));
+    }
+
+    public void testClearingEncryptedDraftPreservesSelectedSim() {
+        final DatabaseWrapper db = DataModel.get().getDatabase();
+        final String conversation = getOrCreateConversation(db, "5553456789", 1234568, false);
+        final String oldSelf = insertActiveSelf(db, 101, 0);
+        final String selectedSelf = insertActiveSelf(db, 102, 1);
+        BugleDatabaseOperations.updateDraftMessageData(db, conversation,
+                MessageData.createDraftSmsMessage(conversation, oldSelf, "draft"),
+                BugleDatabaseOperations.UPDATE_MODE_ADD_DRAFT);
+
+        BugleDatabaseOperations.updateDraftMessageData(db, conversation,
+                MessageData.createDraftSmsMessage(conversation, selectedSelf, ""),
+                BugleDatabaseOperations.UPDATE_MODE_CLEAR_DRAFT);
+
+        assertEquals(selectedSelf, BugleDatabaseOperations.getConversationSelfId(db, conversation));
+        assertNull(BugleDatabaseOperations.readDraftMessageData(db, conversation, selectedSelf));
+    }
+
+    public void testOutgoingSyncDoesNotBroadcastStaleSimSelection() {
+        checkSyncSimBroadcast(false, false);
+    }
+
+    public void testIncomingSameSimDoesNotBroadcastStaleSelection() {
+        checkSyncSimBroadcast(true, true);
+    }
+
+    public void testIncomingDifferentSimStillUpdatesSelection() {
+        checkSyncSimBroadcast(true, false);
+    }
+
+    private void checkSyncSimBroadcast(final boolean incoming, final boolean sameSim) {
+        final DatabaseWrapper db = DataModel.get().getDatabase();
+        final String conversation = getOrCreateConversation(db, "5554567890", 1234569, false);
+        final String oldSelf = insertActiveSelf(db, 101, 0);
+        final String messageSelf = sameSim ? oldSelf : insertActiveSelf(db, 102, 1);
+        final UIIntents intents = Mockito.mock(UIIntents.class);
+        ((FakeFactory) Factory.get()).withUIIntents(intents);
+        Mockito.when(PhoneUtils.getDefault().getEffectiveSubId(101)).thenReturn(101);
+        final MessageData message;
+        if (incoming) {
+            message = MessageData.createReceivedSmsMessage(Uri.parse("content://sms/999"),
+                    conversation, messageSelf, messageSelf, "text", null, 1000, 1000, true, true);
+        } else {
+            message = MessageData.createDraftSmsMessage(conversation, messageSelf, "text");
+            message.updateSendingMessage(conversation, Uri.parse("content://sms/999"), 1000);
+        }
+        db.beginTransaction();
+        try {
+            BugleDatabaseOperations.updateConversationSelfIdInTransaction(db, conversation, oldSelf);
+            BugleDatabaseOperations.insertNewMessageInTransaction(db, message);
+            BugleDatabaseOperations.updateConversationMetadataInTransaction(db, conversation,
+                    message.getMessageId(), 1000, false, true);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        if (incoming && !sameSim) {
+            assertEquals(messageSelf, BugleDatabaseOperations.getConversationSelfId(db, conversation));
+            Mockito.verify(intents).broadcastConversationSelfIdChange(
+                    db.getContext(), conversation, messageSelf);
+        } else {
+            assertEquals(oldSelf, BugleDatabaseOperations.getConversationSelfId(db, conversation));
+        }
+        Mockito.verifyNoMoreInteractions(intents);
     }
 
     private StubActionService mService;

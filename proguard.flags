@@ -62,3 +62,6 @@
 -keepclassmembers class **.R$* {
     public static <fields>;
 }
+
+# JNI entry point in the shared typed binding.
+-keep class chat.dumber.sdk.NativeBridge { *; }

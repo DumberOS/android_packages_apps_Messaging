@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="@dimen/conversation_list_item_view_padding"
+    android:background="?android:attr/selectableItemBackground"
+    android:focusable="true"
+    android:clickable="true">
+
+    <TextView
+        android:id="@+id/dumber_group_count"
+        android:layout_width="@dimen/conversation_list_contact_icon_size"
+        android:layout_height="@dimen/conversation_list_contact_icon_size"
+        android:background="@drawable/dumber_group_avatar"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textSize="20sp"
+        android:textColor="@color/letter_tile_font_color"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        style="@style/ConversationListItemViewPaddingStyle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:importantForAccessibility="noHideDescendants">
+        <TextView
+            android:id="@+id/dumber_group_title"
+            style="@style/ConversationListItemViewConversationNameStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:paddingBottom="2dp" />
+        <TextView
+            android:id="@+id/dumber_group_snippet"
+            style="@style/ConversationListItemViewTextStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:paddingBottom="3dp" />
+    </LinearLayout>
+</LinearLayout>

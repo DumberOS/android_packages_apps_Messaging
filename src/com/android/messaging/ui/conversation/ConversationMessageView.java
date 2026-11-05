@@ -424,6 +424,10 @@ public class ConversationMessageView extends FrameLayout implements View.OnClick
         }
 
         // We set the text even if the view will be GONE for accessibility
+        final boolean encrypted = com.android.messaging.dumber.DumberChat.encrypted(mData.getSmsMessageUri());
+        if (encrypted) {
+            statusText = TextUtils.isEmpty(statusText) ? "Encrypted" : statusText + " · Encrypted";
+        }
         mStatusTextView.setText(statusText);
         final boolean statusVisible = !TextUtils.isEmpty(statusText);
         if (statusVisible) {
@@ -446,9 +450,10 @@ public class ConversationMessageView extends FrameLayout implements View.OnClick
                 !TextUtils.isEmpty(subscriptionEntry.displayName) &&
                 !mData.getCanClusterWithNextMessage();
         if (simNameVisible) {
-            final String simNameText = mData.getIsIncoming() ? getResources().getString(
-                    R.string.incoming_sim_name_text, subscriptionEntry.displayName) :
-                        subscriptionEntry.displayName;
+            final String simNameText = mData.getIsIncoming()
+                    ? (encrypted ? "· " + subscriptionEntry.displayName : getResources().getString(
+                            R.string.incoming_sim_name_text, subscriptionEntry.displayName))
+                    : subscriptionEntry.displayName;
             mSimNameView.setText(simNameText);
             mSimNameView.setTextColor(showSimIconAsIncoming ? getResources().getColor(
                     R.color.timestamp_text_incoming) : subscriptionEntry.displayColor);

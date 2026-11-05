@@ -99,6 +99,7 @@ public class DatabaseMessages {
         public static final int INDEX_SEEN = sIota++;
         public static final int INDEX_DATE_SENT = sIota++;
         public static final int INDEX_SUB_ID = sIota++;
+        public static final int INDEX_SERVICE_CENTER = sIota++;
 
         private static String[] sProjection;
 
@@ -116,16 +117,12 @@ public class DatabaseMessages {
                         Sms.SEEN,
                         Sms.DATE_SENT,
                         Sms.SUBSCRIPTION_ID,
+                        Sms.SERVICE_CENTER,
                     };
                 if (!MmsUtils.hasSmsDateSentColumn()) {
                     projection[INDEX_DATE_SENT] = Sms.DATE;
                 }
-                if (!OsUtil.isAtLeastL_MR1()) {
-                    Assert.equals(INDEX_SUB_ID, projection.length - 1);
-                    String[] withoutSubId = new String[projection.length - 1];
-                    System.arraycopy(projection, 0, withoutSubId, 0, withoutSubId.length);
-                    projection = withoutSubId;
-                }
+
 
                 sProjection = projection;
             }
@@ -168,6 +165,11 @@ public class DatabaseMessages {
             mSeen = cursor.getInt(INDEX_SEEN) == 0 ? false : true;
             mUri = ContentUris.withAppendedId(Sms.CONTENT_URI, mRowId).toString();
             mSubId = PhoneUtils.getDefault().getSubIdFromTelephony(cursor, INDEX_SUB_ID);
+            if (cursor.getColumnCount() > INDEX_SERVICE_CENTER) {
+                com.android.messaging.dumber.DumberChat.transportImported(
+                        com.android.messaging.Factory.get().getApplicationContext(), mUri,
+                        cursor.getString(INDEX_SERVICE_CENTER));
+            }
         }
 
         /**

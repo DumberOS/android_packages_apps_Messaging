@@ -45,16 +45,18 @@ public class SubscriptionListData {
      */
     public static class SubscriptionListEntry {
         public final String selfParticipantId;
+        public final int subscriptionId;
         public final Uri iconUri;
         public final Uri selectedIconUri;
         public final String displayName;
         public final int displayColor;
         public final String displayDestination;
 
-        private SubscriptionListEntry(final String selfParticipantId, final Uri iconUri,
+        private SubscriptionListEntry(final String selfParticipantId, final int subscriptionId, final Uri iconUri,
                 final Uri selectedIconUri, final String displayName, final int displayColor,
                 final String displayDestination) {
             this.selfParticipantId = selfParticipantId;
+            this.subscriptionId = subscriptionId;
             this.iconUri = iconUri;
             this.selectedIconUri = selectedIconUri;
             this.displayName = displayName;
@@ -71,7 +73,7 @@ public class SubscriptionListData {
             final String subscriptionName = selfParticipantData.getSubscriptionName();
             final String displayName = TextUtils.isEmpty(subscriptionName) ?
                     context.getString(R.string.sim_slot_identifier, slotId) : subscriptionName;
-            return new SubscriptionListEntry(selfParticipantData.getId(),
+            return new SubscriptionListEntry(selfParticipantData.getId(), selfParticipantData.getSubId(),
                     AvatarUriUtil.createAvatarUri(selfParticipantData, iconIdentifier,
                             false /* selected */, false /* incoming */),
                     AvatarUriUtil.createAvatarUri(selfParticipantData, iconIdentifier,

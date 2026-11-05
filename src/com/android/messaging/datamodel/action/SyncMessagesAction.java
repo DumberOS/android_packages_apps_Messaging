@@ -420,6 +420,12 @@ public class SyncMessagesAction extends Action implements Parcelable {
 
                     // TODO: Investigate whether we can make this more fine-grained.
                     MessagingContentProvider.notifyEverythingChanged();
+                    for (SmsMessage sms : smsToAdd) {
+                        if (!sms.mSeen && com.android.messaging.dumber.DumberChat.encrypted(sms.mUri)) {
+                            com.android.messaging.dumber.ChatHost.onProviderSynced();
+                            break;
+                        }
+                    }
                 } else {
                     if (LogUtil.isLoggable(TAG, LogUtil.DEBUG)) {
                         LogUtil.d(TAG, "SyncMessagesAction: No local database updates to make");

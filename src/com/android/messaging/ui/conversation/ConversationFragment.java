@@ -201,6 +201,8 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
 
     // Flag to prevent writing draft to DB on pause
     private boolean mSuppressWriteDraft;
+    private com.android.messaging.dumber.ChatConversationControls mDumberControls;
+    private int mDumberQueued;
 
     // Indicates whether local draft should be cleared due to external draft changes that must
     // be reloaded from db
@@ -616,7 +618,24 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
         mComposeMessageView.bind(DataModel.get().createDraftMessageData(
                 mBinding.getData().getConversationId()), this);
 
+        final SimSelectorView simSelector = view.findViewById(R.id.sim_selector);
+        mDumberControls = new com.android.messaging.dumber.ChatConversationControls(getActivity(),
+                (selected, sims, queued) -> {
+                    mComposeMessageView.setChatTransport(selected);
+                    simSelector.setChatTransports(sims);
+                    if (mDumberQueued != queued) {
+                        mDumberQueued = queued;
+                        invalidateOptionsMenu();
+                    }
+                });
         return view;
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (mDumberControls != null) mDumberControls.stop();
+        mDumberControls = null;
+        super.onDestroyView();
     }
 
     private void scrollToPosition(final int targetPosition, final boolean smoothScroll) {
@@ -719,6 +738,8 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
         }
 
         setConversationFocus();
+        updateDumberControls();
+        if (mDumberControls != null) mDumberControls.start();
 
         // On resume, invalidate all message views to show the updated timestamp.
         mAdapter.notifyDataSetChanged();
@@ -741,6 +762,9 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
         }
 
         inflater.inflate(R.menu.conversation_menu, menu);
+        menu.findItem(R.id.action_message_transport).setTitle(mDumberQueued == 0
+                ? getString(R.string.message_transport)
+                : getString(R.string.message_transport_queued, mDumberQueued));
 
         final ConversationData data = mBinding.getData();
 
@@ -767,6 +791,10 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
     @Override
     public boolean onOptionsItemSelected(final MenuItem item) {
         switch (item.getItemId()) {
+            case R.id.action_message_transport:
+                if (mDumberControls != null) mDumberControls.showDetails();
+                return true;
+
             case R.id.action_people_and_options:
                 Assert.isTrue(mBinding.getData().getParticipantsLoaded());
                 UIIntents.get().launchPeopleAndOptionsActivity(getActivity(), mConversationId);
@@ -953,6 +981,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
         // Ensure that the action bar is updated with the current data.
         invalidateOptionsMenu();
         mHost.onConversationMetadataUpdated();
+        updateDumberControls();
         mAdapter.notifyDataSetChanged();
     }
 
@@ -989,6 +1018,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
     @Override
     public void onPause() {
         super.onPause();
+        if (mDumberControls != null) mDumberControls.stop();
         if (mComposeMessageView != null && !mSuppressWriteDraft) {
             mComposeMessageView.writeDraftMessage();
         }
@@ -1070,7 +1100,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
      */
     @Override
     public boolean isReadyForAction() {
-        return UiUtils.isReadyForAction();
+        return UiUtils.isReadyForAction(getConversationSelfSubId());
     }
 
     public boolean isReadyForDeleteAction() {
@@ -1093,6 +1123,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
             mChangeDefaultSmsAppHelper = new ChangeDefaultSmsAppHelper();
         }
         mChangeDefaultSmsAppHelper.warnOfMissingActionConditions(sending,
+                getConversationSelfSubId(),
                 commandToRunAfterActionConditionResolved, mComposeMessageView,
                 getView().getRootView(),
                 getActivity(), this);
@@ -1215,6 +1246,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
             mRecyclerView.setVisibility(View.VISIBLE);
             mHost.onConversationParticipantDataLoaded
                 (mBinding.getData().getNumberOfParticipantsExcludingSelf());
+            updateDumberControls();
         }
     }
 
@@ -1222,6 +1254,8 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
     public void onSubscriptionListDataLoaded(final ConversationData data) {
         mBinding.ensureBound(data);
         mAdapter.notifyDataSetChanged();
+        updateDumberControls();
+        if (mDumberControls != null) mDumberControls.subscriptionsChanged();
     }
 
     @Override
@@ -1463,9 +1497,23 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
         mHost.dismissActionMode();
     }
 
+    private void updateDumberControls() {
+        if (getView() == null || !mBinding.isBound() || mDraftMessageDataModel == null
+                || !mDraftMessageDataModel.isBound()) return;
+        if (mDumberControls == null) return;
+        final ConversationData data = mBinding.getData();
+        final DraftMessageData draft = mDraftMessageDataModel.getData();
+        mDumberControls.update(mConversationId,
+                data.getParticipantsLoaded() && data.getNumberOfParticipantsExcludingSelf() == 1
+                        ? data.getParticipantPhoneNumber() : null,
+                getConversationSelfSubId(), draft.hasAttachments() || draft.hasPendingAttachments()
+                        || !TextUtils.isEmpty(draft.getMessageSubject()), draft.getIsMms());
+    }
+
     @Override
     public void selectSim(final SubscriptionListEntry subscriptionData) {
         mComposeMessageView.selectSim(subscriptionData);
+        updateDumberControls();
         mHost.onStartComposeMessage();
     }
 
@@ -1614,11 +1662,6 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
     }
 
     @Override
-    public boolean shouldShowSubjectEditor() {
-        return true;
-    }
-
-    @Override
     public boolean shouldHideAttachmentsWhenSimSelectorShown() {
         return false;
     }
@@ -1651,6 +1694,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
     @Override
     public void onDraftChanged(final DraftMessageData data, final int changeFlags) {
         mDraftMessageDataModel.ensureBound(data);
+        updateDumberControls();
         // We're specifically only interested in ATTACHMENTS_CHANGED from the widget. Ignore
         // other changes. When the widget changes an attachment, we need to reload the draft.
         if (changeFlags ==

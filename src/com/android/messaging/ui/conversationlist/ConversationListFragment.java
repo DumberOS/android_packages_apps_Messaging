@@ -93,6 +93,21 @@ public class ConversationListFragment extends Fragment implements ConversationLi
     private ImageView mStartNewConversationButton;
     private ListEmptyView mEmptyListMessageView;
     private ConversationListAdapter mAdapter;
+    private int chatGeneration;
+    private final android.content.BroadcastReceiver chatReceiver = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context context, android.content.Intent intent) {
+            loadChatGroups();
+        }
+    };
+    private void loadChatGroups() {
+        if (mForwardMessageMode || getActivity() == null) return;
+        final int generation = ++chatGeneration;
+        com.android.messaging.dumber.ChatGroups.load(getActivity(), mArchiveMode, groups -> {
+            if (generation != chatGeneration || getActivity() == null || mEmptyListMessageView == null) return;
+            mAdapter.setGroups(groups);
+            updateEmptyListUi(mAdapter.getItemCount() == 0);
+        });
+    }
 
     // Saved Instance State Data - only for temporal data which is nice to maintain but not
     // critical for correctness.
@@ -132,6 +147,11 @@ public class ConversationListFragment extends Fragment implements ConversationLi
     @Override
     public void onResume() {
         super.onResume();
+        getActivity().registerReceiver(chatReceiver,
+                new android.content.IntentFilter(com.android.messaging.dumber.DumberChat.CHANGED),
+                android.content.Context.RECEIVER_NOT_EXPORTED);
+        loadChatGroups();
+        com.android.messaging.dumber.DumberChat.resume(getActivity());
 
         Assert.notNull(mHost);
         setScrolledToNewestConversationIfNeeded();
@@ -268,6 +288,8 @@ public class ConversationListFragment extends Fragment implements ConversationLi
 
     @Override
     public void onPause() {
+        ++chatGeneration;
+        getActivity().unregisterReceiver(chatReceiver);
         super.onPause();
         mListState = mRecyclerView.getLayoutManager().onSaveInstanceState();
         mListBinding.getData().setScrolledToNewestConversation(false);
@@ -286,7 +308,7 @@ public class ConversationListFragment extends Fragment implements ConversationLi
             final Cursor cursor) {
         mListBinding.ensureBound(data);
         final Cursor oldCursor = mAdapter.swapCursor(cursor);
-        updateEmptyListUi(cursor == null || cursor.getCount() == 0);
+        updateEmptyListUi(mAdapter.getItemCount() == 0);
         if (mListState != null && cursor != null && oldCursor == null) {
             mRecyclerView.getLayoutManager().onRestoreInstanceState(mListState);
         }

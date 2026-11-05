@@ -67,6 +67,11 @@ public class SimSelectorItemView extends LinearLayout {
         mHost = host;
     }
 
+    public void setTransportLabel(final String label) {
+        mNameTextView.setText(label == null ? mData.displayName : label + " · " + mData.displayName);
+        mNameTextView.setVisibility(VISIBLE);
+    }
+
     private void updateViewAppearance() {
         Assert.notNull(mData);
         final String displayName = mData.displayName;

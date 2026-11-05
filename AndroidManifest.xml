@@ -18,7 +18,11 @@
     package="com.android.messaging"
     android:installLocation="internalOnly">
 
-    <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="29" />
+    <uses-sdk android:minSdkVersion="34" android:targetSdkVersion="29" />
+
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
 
     <!-- Application holds CPU wakelock while working in background -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -538,6 +542,11 @@
         </activity>
 
         <service android:name="androidx.appcompat.mms.MmsService"/>
+        <activity android:name=".dumber.ChatSettingsActivity" android:exported="false" android:label="dumber.chat" />
+        <activity android:name=".dumber.ChatGroupActivity" android:exported="false" android:label="Encrypted group" />
+        <service android:name=".dumber.ChatCallService" android:exported="true" />
+        <service android:name=".dumber.ChatSyncService" android:exported="false" android:foregroundServiceType="remoteMessaging" />
+        <service android:name=".dumber.ChatLogoutJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 
 </manifest>

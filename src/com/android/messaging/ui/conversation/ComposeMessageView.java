@@ -22,7 +22,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import androidx.appcompat.app.ActionBar;
 import android.text.Editable;
-import android.text.Html;
 import android.text.InputFilter;
 import android.text.InputFilter.LengthFilter;
 import android.text.TextUtils;
@@ -38,6 +37,7 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.android.messaging.dumber.ChatComposeState;
 import com.android.messaging.Factory;
 import com.android.messaging.R;
 import com.android.messaging.datamodel.binding.Binding;
@@ -98,7 +98,6 @@ public class ComposeMessageView extends LinearLayout
                 boolean tooManyVideos);
         void notifyOfAttachmentLoadFailed();
         void showAttachmentChooser();
-        boolean shouldShowSubjectEditor();
         boolean shouldHideAttachmentsWhenSimSelectorShown();
         Uri getSelfSendButtonIconUri();
         int overrideCounterColor();
@@ -115,13 +114,11 @@ public class ComposeMessageView extends LinearLayout
     private static final int SEND_WIDGET_MODE_SEND_BUTTON = 3;
 
     private PlainTextEditText mComposeEditText;
-    private PlainTextEditText mComposeSubjectText;
     private TextView mMessageBodySize;
     private TextView mMmsIndicator;
     private SimIconView mSelfSendIcon;
     private ImageButton mSendButton;
-    private View mSubjectView;
-    private ImageButton mDeleteSubjectButton;
+    private ChatComposeState mChatTransport = ChatComposeState.SMS;
     private AttachmentPreview mAttachmentPreview;
     private ImageButton mAttachMediaButton;
 
@@ -229,39 +226,13 @@ public class ComposeMessageView extends LinearLayout
         mSelfSendIcon.setOnLongClickListener(new OnLongClickListener() {
             @Override
             public boolean onLongClick(final View v) {
-                if (mHost.shouldShowSubjectEditor()) {
-                    showSubjectEditor();
-                } else {
-                    boolean shown = mInputManager.toggleSimSelector(true /* animate */,
-                            getSelfSubscriptionListEntry());
-                    hideAttachmentsWhenShowingSims(shown);
-                }
+                if (!shouldShowSimSelector(mConversationDataModel.getData())) return false;
+                boolean shown = mInputManager.toggleSimSelector(true /* animate */,
+                        getSelfSubscriptionListEntry());
+                hideAttachmentsWhenShowingSims(shown);
                 return true;
             }
         });
-
-        mComposeSubjectText = (PlainTextEditText) findViewById(
-                R.id.compose_subject_text);
-        // We need the listener to change the avatar to the send button when the user starts
-        // typing a subject without a message.
-        mComposeSubjectText.addTextChangedListener(this);
-        // onFinishInflate() is called before self is loaded from db. We set the default text
-        // limit here, and apply the real limit later in updateOnSelfSubscriptionChange().
-        mComposeSubjectText.setFilters(new InputFilter[] {
-                new LengthFilter(MmsConfig.get(ParticipantData.DEFAULT_SELF_SUB_ID)
-                        .getMaxSubjectLength())});
-
-        mDeleteSubjectButton = (ImageButton) findViewById(R.id.delete_subject_button);
-        mDeleteSubjectButton.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(final View clickView) {
-                hideSubjectEditor();
-                mComposeSubjectText.setText(null);
-                mBinding.getData().setMessageSubject(null);
-            }
-        });
-
-        mSubjectView = findViewById(R.id.subject_view);
 
         mSendButton = (ImageButton) findViewById(R.id.send_message_button);
         mSendButton.setOnClickListener(new OnClickListener() {
@@ -273,12 +244,10 @@ public class ComposeMessageView extends LinearLayout
         mSendButton.setOnLongClickListener(new OnLongClickListener() {
             @Override
             public boolean onLongClick(final View arg0) {
+                if (!shouldShowSimSelector(mConversationDataModel.getData())) return false;
                 boolean shown = mInputManager.toggleSimSelector(true /* animate */,
                         getSelfSubscriptionListEntry());
                 hideAttachmentsWhenShowingSims(shown);
-                if (mHost.shouldShowSubjectEditor()) {
-                    showSubjectEditor();
-                }
                 return true;
             }
         });
@@ -287,13 +256,12 @@ public class ComposeMessageView extends LinearLayout
             public void onPopulateAccessibilityEvent(View host, AccessibilityEvent event) {
                 super.onPopulateAccessibilityEvent(host, event);
                 // When the send button is long clicked, we want TalkBack to announce the real
-                // action (select SIM or edit subject), as opposed to "long press send button."
-                if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
+                // action (select SIM), as opposed to "long press send button."
+                if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED &&
+                        shouldShowSimSelector(mConversationDataModel.getData())) {
                     event.getText().clear();
                     event.getText().add(getResources()
-                            .getText(shouldShowSimSelector(mConversationDataModel.getData()) ?
-                            R.string.send_button_long_click_description_with_sim_selector :
-                                R.string.send_button_long_click_description_no_sim_selector));
+                            .getText(R.string.sim_selector_button_content_description));
                     // Make this an announcement so TalkBack will read our custom message.
                     event.setEventType(AccessibilityEvent.TYPE_ANNOUNCEMENT);
                 }
@@ -344,22 +312,6 @@ public class ComposeMessageView extends LinearLayout
         return BindingBase.createBindingReference(mBinding);
     }
 
-    // returns true if it actually shows the subject editor and false if already showing
-    private boolean showSubjectEditor() {
-        // show the subject editor
-        if (mSubjectView.getVisibility() == View.GONE) {
-            mSubjectView.setVisibility(View.VISIBLE);
-            mSubjectView.requestFocus();
-            return true;
-        }
-        return false;
-    }
-
-    private void hideSubjectEditor() {
-        mSubjectView.setVisibility(View.GONE);
-        mComposeEditText.requestFocus();
-    }
-
     /**
      * {@inheritDoc} from TextView.OnEditorActionListener
      */
@@ -385,8 +337,7 @@ public class ComposeMessageView extends LinearLayout
             mInputManager.showHideSimSelector(false /* show */, true /* animate */);
             final String messageToSend = mComposeEditText.getText().toString();
             mBinding.getData().setMessageText(messageToSend);
-            final String subject = mComposeSubjectText.getText().toString();
-            mBinding.getData().setMessageSubject(subject);
+            mBinding.getData().setMessageSubject(null);
             // Asynchronously check the draft against various requirements before sending.
             mBinding.getData().checkDraftForAction(checkMessageSize,
                     mHost.getConversationSelfSubId(), new CheckDraftTaskCallback() {
@@ -401,7 +352,7 @@ public class ComposeMessageView extends LinearLayout
                             if (message != null && message.hasContent()) {
                                 playSentSound();
                                 mHost.sendMessage(message);
-                                hideSubjectEditor();
+                                mComposeEditText.requestFocus();
                                 if (AccessibilityUtil.isTouchExplorationEnabled(getContext())) {
                                     AccessibilityUtil.announceForAccessibilityCompat(
                                             ComposeMessageView.this, null,
@@ -430,6 +381,19 @@ public class ComposeMessageView extends LinearLayout
                             Assert.isTrue(checkMessageSize);
                             mHost.warnOfExceedingMessageLimit(
                                     true /*sending*/, true /* tooManyVideos */);
+                            break;
+
+                        case CheckDraftForSendTask.RESULT_ENCRYPTED_CONTENT_UNSUPPORTED:
+                            UiUtils.showToastAtBottom(
+                                    com.android.messaging.dumber.DumberChat.UNSUPPORTED_CONTENT);
+                            break;
+
+                        case CheckDraftForSendTask.RESULT_TRANSPORT_CHECK_FAILED:
+                            UiUtils.showToastAtBottom("Couldn't check encryption. Your draft hasn't been sent. Try again.");
+                            break;
+
+                        case CheckDraftForSendTask.RESULT_DRAFT_CHANGED:
+                            UiUtils.showToastAtBottom("Message changed. Tap Send again.");
                             break;
 
                         case CheckDraftForSendTask.RESULT_SIM_NOT_READY:
@@ -476,26 +440,19 @@ public class ComposeMessageView extends LinearLayout
         // As this is called asynchronously when message read check bound before updating text
         mBinding.ensureBound(data);
 
-        // We have to cache the values of the DraftMessageData because when we set
-        // mComposeEditText, its onTextChanged calls updateVisualsOnDraftChanged,
-        // which immediately reloads the text from the subject and message fields and replaces
-        // what's in the DraftMessageData.
-
+        // Keep subjects from existing or externally supplied drafts as visible body text.
+        // Never leave an invisible subject that could force MMS when the user sends.
         final String subject = data.getMessageSubject();
-        final String message = data.getMessageText();
+        final String body = data.getMessageText();
+        final String message = TextUtils.isEmpty(subject) ? body :
+                subject + (TextUtils.isEmpty(body) ? "" : "\n\n" + body);
+        data.setMessageSubject(null);
+        data.setMessageText(message);
 
         boolean hasAttachmentsChanged = false;
 
-        if ((changeFlags & DraftMessageData.MESSAGE_SUBJECT_CHANGED) ==
-                DraftMessageData.MESSAGE_SUBJECT_CHANGED) {
-            mComposeSubjectText.setText(subject);
-
-            // Set the cursor selection to the end since setText resets it to the start
-            mComposeSubjectText.setSelection(mComposeSubjectText.getText().length());
-        }
-
-        if ((changeFlags & DraftMessageData.MESSAGE_TEXT_CHANGED) ==
-                DraftMessageData.MESSAGE_TEXT_CHANGED) {
+        if (!TextUtils.isEmpty(subject) ||
+                (changeFlags & DraftMessageData.MESSAGE_TEXT_CHANGED) != 0) {
             mComposeEditText.setText(message);
 
             // Set the cursor selection to the end since setText resets it to the start
@@ -526,9 +483,6 @@ public class ComposeMessageView extends LinearLayout
         mComposeEditText.setFilters(new InputFilter[] {
                 new LengthFilter(MmsConfig.get(mBinding.getData().getSelfSubId())
                         .getMaxTextLimit()) });
-        mComposeSubjectText.setFilters(new InputFilter[] {
-                new LengthFilter(MmsConfig.get(mBinding.getData().getSelfSubId())
-                        .getMaxSubjectLength())});
     }
 
     @Override
@@ -594,8 +548,7 @@ public class ComposeMessageView extends LinearLayout
         final String messageText = mComposeEditText.getText().toString();
         mBinding.getData().setMessageText(messageText);
 
-        final String subject = mComposeSubjectText.getText().toString();
-        mBinding.getData().setMessageSubject(subject);
+        mBinding.getData().setMessageSubject(null);
 
         mBinding.getData().saveToStorage(mBinding);
     }
@@ -673,20 +626,17 @@ public class ComposeMessageView extends LinearLayout
         final DraftMessageData draftMessageData = mBinding.getData();
         draftMessageData.setMessageText(messageText);
 
-        final String subject = mComposeSubjectText.getText().toString();
-        draftMessageData.setMessageSubject(subject);
-        if (!TextUtils.isEmpty(subject)) {
-             mSubjectView.setVisibility(View.VISIBLE);
-        }
+        draftMessageData.setMessageSubject(null);
 
         final boolean hasMessageText = (TextUtils.getTrimmedLength(messageText) > 0);
-        final boolean hasSubject = (TextUtils.getTrimmedLength(subject) > 0);
-        final boolean hasWorkingDraft = hasMessageText || hasSubject ||
+        final boolean hasWorkingDraft = hasMessageText ||
                 mBinding.getData().hasAttachments();
 
         final List<MessagePartData> attachments =
                 new ArrayList<MessagePartData>(draftMessageData.getReadOnlyAttachments());
-        if (draftMessageData.getIsMms()) { // MMS case
+        if (!mChatTransport.getCarrier()) {
+            mMessageBodySize.setVisibility(View.INVISIBLE);
+        } else if (draftMessageData.getIsMms()) { // MMS case
             if (draftMessageData.hasAttachments()) {
                 if (hasAttachmentsChanged) {
                     // Calculate message attachments size and show it.
@@ -734,7 +684,7 @@ public class ComposeMessageView extends LinearLayout
                     // the send button.
                     UiUtils.revealOrHideViewWithAnimation(mSelfSendIcon, GONE, null);
                 }
-                mMmsIndicator.setVisibility(draftMessageData.getIsMms() ? VISIBLE : INVISIBLE);
+                mMmsIndicator.setVisibility(mChatTransport.getCarrier() && draftMessageData.getIsMms() ? VISIBLE : INVISIBLE);
                 sendWidgetMode = SEND_WIDGET_MODE_SEND_BUTTON;
             } else {
                 mSelfSendIcon.setImageResourceUri(selfSendButtonUri);
@@ -759,16 +709,7 @@ public class ComposeMessageView extends LinearLayout
         // Update the text hint on the message box depending on the attachment type.
         final int attachmentCount = attachments.size();
         if (attachmentCount == 0) {
-            final SubscriptionListEntry subscriptionListEntry =
-                    mConversationDataModel.getData().getSubscriptionEntryForSelfParticipant(
-                            mBinding.getData().getSelfId(), false /* excludeDefault */);
-            if (subscriptionListEntry == null) {
-                mComposeEditText.setHint(R.string.compose_message_view_hint_text);
-            } else {
-                mComposeEditText.setHint(Html.fromHtml(getResources().getString(
-                        R.string.compose_message_view_hint_text_multi_sim,
-                        subscriptionListEntry.displayName)));
-            }
+            mComposeEditText.setHint(mChatTransport.getHint());
         } else {
             int type = -1;
             for (final MessagePartData attachment : attachments) {
@@ -823,6 +764,33 @@ public class ComposeMessageView extends LinearLayout
                     Assert.fail("Unsupported attachment type!");
                     break;
             }
+        }
+        updateTransportAppearance();
+    }
+
+    /** Update transport indicators without rewriting the user's draft or cursor position. */
+    public void setChatTransport(final ChatComposeState transport) {
+        if (mChatTransport == transport) return;
+        mChatTransport = transport;
+        if (mBinding.isBound() && mConversationDataModel != null) updateVisualsOnDraftChanged();
+        else updateTransportAppearance();
+    }
+
+    private void updateTransportAppearance() {
+        final boolean unsupported = mBinding.isBound() &&
+                (mBinding.getData().hasAttachments() || mBinding.getData().hasPendingAttachments());
+        final boolean encrypted = mChatTransport.getEncrypted() && !unsupported;
+        mSendButton.setImageResource(encrypted ? R.drawable.ic_send_encrypted : R.drawable.ic_send_light);
+        mSendButton.setContentDescription(encrypted ? "Send encrypted message" :
+                mChatTransport.getCarrier() ? "Send text message" : "Send message · " +
+                    (unsupported ? ChatComposeState.UNSUPPORTED.getHint() : mChatTransport.getHint()));
+        if (!mChatTransport.getCarrier()) {
+            mMessageBodySize.setVisibility(INVISIBLE);
+            mMmsIndicator.setVisibility(INVISIBLE);
+        }
+        if (!unsupported || !mChatTransport.getCarrier()) {
+            mComposeEditText.setHint(unsupported && mChatTransport.getEncrypted()
+                    ? ChatComposeState.UNSUPPORTED.getHint() : mChatTransport.getHint());
         }
     }
 

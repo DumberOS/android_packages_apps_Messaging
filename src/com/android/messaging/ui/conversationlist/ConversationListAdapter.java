@@ -33,12 +33,69 @@ public class ConversationListAdapter
         extends CursorRecyclerAdapter<ConversationListAdapter.ConversationListViewHolder> {
 
     private final ConversationListItemView.HostInterface mClivHostInterface;
+    private java.util.List<com.android.messaging.dumber.ChatGroupRow> groups = java.util.Collections.emptyList();
+    private final java.util.List<Row> rows = new java.util.ArrayList<>();
+    private static class Row {
+        int position;
+        long id, date;
+        com.android.messaging.dumber.ChatGroupRow group;
+    }
+    public void setGroups(java.util.List<com.android.messaging.dumber.ChatGroupRow> value) {
+        groups = value; rebuildRows(); notifyDataSetChanged();
+    }
+    private void rebuildRows() {
+        rows.clear();
+        if (mCursor != null && !mCursor.isClosed()) {
+            final int old = mCursor.getPosition();
+            for (int i = 0; i < mCursor.getCount(); i++) {
+                mCursor.moveToPosition(i);
+                Row row = new Row(); row.position = i;
+                row.id = mCursor.getLong(mRowIDColumn);
+                row.date = mCursor.getLong(mCursor.getColumnIndexOrThrow("sort_timestamp"));
+                rows.add(row);
+            }
+            mCursor.moveToPosition(old);
+        }
+        for (com.android.messaging.dumber.ChatGroupRow group : groups) {
+            Row row = new Row(); row.group = group; row.date = group.getTimestamp();
+            // Group IDs occupy a distinct namespace from positive provider conversation IDs.
+            row.id = Long.MIN_VALUE | Long.parseUnsignedLong(group.getKey().substring(0, 15), 16);
+            rows.add(row);
+        }
+        rows.sort((a, b) -> {
+            boolean ap = a.group != null && a.group.getPinned();
+            boolean bp = b.group != null && b.group.getPinned();
+            int pinned = Boolean.compare(bp, ap);
+            return pinned != 0 ? pinned : Long.compare(b.date, a.date);
+        });
+    }
+    @Override public Cursor swapCursor(Cursor cursor) {
+        Cursor old = super.swapCursor(cursor); rebuildRows(); notifyDataSetChanged(); return old;
+    }
+    @Override public int getItemCount() { return rows == null ? 0 : rows.size(); }
+    @Override public long getItemId(int position) { return rows.get(position).id; }
+    @Override public int getItemViewType(int position) { return rows.get(position).group == null ? 0 : 1; }
+    @Override public void onBindViewHolder(ConversationListViewHolder holder, int position) {
+        Row row = rows.get(position);
+        if (row.group != null) {
+            com.android.messaging.dumber.ChatGroups.bind(holder.itemView, row.group);
+        } else {
+            mCursor.moveToPosition(row.position);
+            bindViewHolder(holder, mContext, mCursor);
+        }
+    }
+    @Override public Object getItem(int position) {
+        Row row = rows.get(position);
+        if (row.group != null) return row.group;
+        mCursor.moveToPosition(row.position); return mCursor;
+    }
 
     public ConversationListAdapter(final Context context, final Cursor cursor,
             final ConversationListItemView.HostInterface clivHostInterface) {
         super(context, cursor, 0);
         mClivHostInterface = clivHostInterface;
         setHasStableIds(true);
+        rebuildRows();
     }
 
     /**
@@ -56,6 +113,10 @@ public class ConversationListAdapter
     @Override
     public ConversationListViewHolder createViewHolder(final Context context,
             final ViewGroup parent, final int viewType) {
+        if (viewType == 1) {
+            return new ConversationListViewHolder(LayoutInflater.from(context).inflate(
+                    R.layout.dumber_group_list_item, parent, false));
+        }
         final LayoutInflater layoutInflater = LayoutInflater.from(context);
         final ConversationListItemView itemView =
                 (ConversationListItemView) layoutInflater.inflate(
@@ -69,9 +130,9 @@ public class ConversationListAdapter
     public static class ConversationListViewHolder extends RecyclerView.ViewHolder {
         final ConversationListItemView mView;
 
-        public ConversationListViewHolder(final ConversationListItemView itemView) {
+        public ConversationListViewHolder(final android.view.View itemView) {
             super(itemView);
-            mView = itemView;
+            mView = itemView instanceof ConversationListItemView ? (ConversationListItemView) itemView : null;
         }
     }
 }

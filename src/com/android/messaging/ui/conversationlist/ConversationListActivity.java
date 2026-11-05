@@ -16,6 +16,10 @@
 
 package com.android.messaging.ui.conversationlist;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import androidx.appcompat.app.ActionBar;
@@ -23,11 +27,32 @@ import android.view.Menu;
 import android.view.MenuItem;
 
 import com.android.messaging.R;
+import com.android.messaging.dumber.DumberChat;
 import com.android.messaging.ui.UIIntents;
 import com.android.messaging.util.DebugUtils;
 import com.android.messaging.util.Trace;
 
 public class ConversationListActivity extends AbstractConversationListActivity {
+    private boolean mChatActivated;
+    private int mChatStateGeneration;
+    private final BroadcastReceiver mChatStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            refreshChatActivation();
+        }
+    };
+
+    private void refreshChatActivation() {
+        final int generation = ++mChatStateGeneration;
+        DumberChat.loadActivation(this, activated -> {
+            if (generation != mChatStateGeneration) return;
+            if (mChatActivated != activated) {
+                mChatActivated = activated;
+                supportInvalidateOptionsMenu();
+            }
+        });
+    }
+
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
         Trace.beginSection("ConversationListActivity.onCreate");
@@ -53,10 +78,20 @@ public class ConversationListActivity extends AbstractConversationListActivity {
     @Override
     public void onResume() {
         super.onResume();
+        registerReceiver(mChatStateReceiver, new IntentFilter(DumberChat.CHANGED),
+                Context.RECEIVER_NOT_EXPORTED);
+        refreshChatActivation();
         // Invalidate the menu as items that are based on settings may have changed
         // while not in the app (e.g. Talkback enabled/disable affects new conversation
         // button)
         supportInvalidateOptionsMenu();
+    }
+
+    @Override
+    public void onPause() {
+        ++mChatStateGeneration;
+        unregisterReceiver(mChatStateReceiver);
+        super.onPause();
     }
 
     @Override
@@ -74,6 +109,12 @@ public class ConversationListActivity extends AbstractConversationListActivity {
             return true;
         }
         getMenuInflater().inflate(R.menu.conversation_list_fragment_menu, menu);
+        if (mChatActivated) {
+            menu.add("New encrypted group").setOnMenuItemClickListener(item -> {
+                DumberChat.newGroup(this);
+                return true;
+            });
+        }
         final MenuItem item = menu.findItem(R.id.action_debug_options);
         if (item != null) {
             final boolean enableDebugItems = DebugUtils.isDebugEnabled();

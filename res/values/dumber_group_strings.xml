@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dumber_group_message_hint">Encrypted message</string>
+    <string name="dumber_group_send">Send encrypted message</string>
+    <string name="dumber_group_details">Group details</string>
+    <string name="dumber_group_participants">Manage participants</string>
+    <plurals name="dumber_group_participant_count">
+        <item quantity="one">%d participant</item>
+        <item quantity="other">%d participants</item>
+    </plurals>
+</resources>
