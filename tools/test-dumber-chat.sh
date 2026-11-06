@@ -6,7 +6,7 @@ rom_dir="$(cd "$app_dir/../../.." && pwd)"
 : "${KOTLIN:=$rom_dir/external/kotlinc/bin/kotlin}"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
-"$KOTLINC" "$app_dir"/vendor/dumber-chat-core/bindings/kotlin/src/main/kotlin/chat/dumber/sdk/{Models,ChatApi}.kt \
+"$KOTLINC" "$app_dir"/prebuilts/dumber-chat/kotlin/src/main/kotlin/chat/dumber/sdk/{Models,ChatApi}.kt \
     "$app_dir"/src/com/android/messaging/dumber/{ChatModels,ChatDelivery,ChatActivation,ChatGroupActions}.kt \
     "$app_dir/tests/dumber-chat/DeliveryTest.kt" "$app_dir/tests/dumber-chat/ActivationTest.kt" "$app_dir/tests/dumber-chat/GroupTest.kt" -d "$test_dir/tests.jar"
 "$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.DeliveryTestKt

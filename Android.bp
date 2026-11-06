@@ -110,7 +110,7 @@ android_app {
 
 java_library {
     name: "dumber-chat-sdk",
-    srcs: ["vendor/dumber-chat-core/bindings/kotlin/src/main/kotlin/**/*.kt"],
+    srcs: ["prebuilts/dumber-chat/kotlin/src/main/kotlin/**/*.kt"],
     sdk_version: "current",
     min_sdk_version: "23",
     static_libs: ["kotlin-stdlib"],
@@ -119,8 +119,8 @@ java_library {
 cc_prebuilt_library_shared {
     name: "libdumber_chat_core",
     arch: {
-        arm64: { srcs: ["native/arm64-v8a/libdumber_chat_core.so"] },
-        arm: { srcs: ["native/armeabi-v7a/libdumber_chat_core.so"] },
+        arm64: { srcs: ["prebuilts/dumber-chat/arm64-v8a/libdumber_chat_core.so"] },
+        arm: { srcs: ["prebuilts/dumber-chat/armeabi-v7a/libdumber_chat_core.so"] },
     },
     compile_multilib: "both",
     sdk_version: "23",

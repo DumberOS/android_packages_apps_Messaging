@@ -14,7 +14,7 @@ Encrypted direct messages appear in ordinary threads with an **Encrypted** label
 
 ## Code boundaries
 
-- `vendor/dumber-chat-core`: Rust implementation and its matching `chat.dumber.sdk` Kotlin binding. The binding owns serialization and the JNI contract. Refresh both together when updating the core.
+- `prebuilts/dumber-chat`: precompiled ARM64/ARM32 Rust JNI libraries, matching `chat.dumber.sdk` Kotlin bindings, checksums, provenance and third-party notices. Refresh this entire bundle together. Rust source stays in the separate dumber.chat repository, not this app tree.
 - `src/com/android/messaging/dumber`: typed Android account, SIM, queue, encrypted group storage, services and UI. This code does not construct JSON or know Matrix commands.
 - `ChatHost.java` and the small Bugle hooks: carrier sending, provider synchronization, notifications, settings and conversation-list integration.
 - `ChatDelivery.kt`: testable delivery state transitions with a typed `ChatApi` dependency.
@@ -23,16 +23,28 @@ Account credentials, crypto-store passwords, pending sends and group records are
 
 ## Build
 
-This integration targets the Android 14 ROM. Install Rust 1.96 or newer, both Rust Android targets, and the Android NDK (default version `30.0.16248370`, overridable with `ANDROID_NDK_HOME`):
+This integration targets the Android 14 ROM. The native libraries are included in the repository. App and ROM image builds require no Cargo, Rust target installation, external NDK, or native dependency download:
 
 ```sh
-rustup target add aarch64-linux-android armv7-linux-androideabi
 bash packages/apps/Messaging/tools/build-dumber-messaging.sh
 ```
 
-The wrapper prepares both native libraries with the vendored Cargo lockfile, then builds `messaging` and `messagingtests` for `lineage_vanilla31-ap2a-userdebug`. Another lunch target can be passed as its argument. `scripts/build_all_images.sh` also prepares the native libraries before building ROM images.
+The wrapper verifies the prebuilt checksums, then builds `messaging` and `messagingtests` for `lineage_vanilla31-ap2a-userdebug`. Another lunch target can be passed as its argument. `scripts/build_all_images.sh` verifies both Messaging and Dialer prebuilts before building ROM images.
 
-When using `m` directly, first run `tools/prepare-dumber-chat.sh` from this app. Soong consumes the prepared ARM64 and ARM32 libraries; it does not download dependencies or run Cargo. Re-run preparation after changing the vendored core. Generated libraries and Cargo build output are ignored by Git. The exact JNI class name is preserved through R8.
+Using `m messaging` directly also consumes the shipped ARM64 and ARM32 libraries. `tools/prepare-dumber-chat.sh` remains a compatibility entry point for checksum verification only. The exact JNI class name is preserved through R8. Include the complete `prebuilts/dumber-chat` directory in commits and source distributions; it is not ignored by Git.
+
+### Updating the native library (maintainers only)
+
+Ordinary ROM builders skip this step. To update the core, obtain the separate dumber.chat source checkout, install Rust 1.96+ with both Android targets and a Linux NDK, then run:
+
+```sh
+rustup target add aarch64-linux-android armv7-linux-androideabi
+python3 packages/apps/Messaging/tools/update-dumber-chat-prebuilts.py \
+  --source /path/to/dumber.chat/crates/chat-core \
+  --ndk /path/to/android-ndk-r30
+```
+
+The updater builds both ABIs with the source checkout's Cargo lockfile and packages their matching Kotlin bindings. It records source/artifact SHA-256 hashes, compiler/NDK versions and dependency notices. It validates the staged bundle before replacing the installed bundle; failed builds leave the existing bundle intact. Run it without a concurrent ROM build and commit the entire resulting bundle together. Kotlin/JNI API changes require regenerating this bundle, not editing the copied bindings alone.
 
 ## Validation
 
