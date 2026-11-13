@@ -54,7 +54,8 @@ android_app {
     name: "messaging",
 
     srcs: ["src/**/*.java", "src/**/*.kt"],
-    compile_multilib: "both",
+    // Package only the ROM's preferred ABI; keep both prebuilts for ARM32/ARM64 products.
+    compile_multilib: "first",
     jni_libs: ["libdumber_chat_core"],
     use_embedded_native_libs: true,
     min_sdk_version: "34",

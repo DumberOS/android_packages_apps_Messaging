@@ -1,6 +1,7 @@
 {
   "format": 1,
-  "built_at_utc": "2026-11-06T17:11:57.120332+00:00",
+  "cargo_profile": "android-size",
+  "built_at_utc": "2026-11-13T14:11:08.419747+00:00",
   "source": "dumber.chat/crates/chat-core",
   "source_sha256": {
     "Cargo.toml": "b7d63b278ecb0f48d2ad1ce47c1acfc8d4892a6a4d78b20a0c533e2ac7c63de1",
@@ -20,7 +21,7 @@
     "bindings/kotlin/src/main/kotlin/chat/dumber/sdk/ChatStorage.kt": "90240546ed9d98f43043099470ba49a5e76e7cc90d4609f05a6bb84361a6e854",
     "bindings/kotlin/src/main/kotlin/chat/dumber/sdk/Models.kt": "3a29e90bc8c983256c2a22158dd27c5d33647cb868ff6bfc558d062c9ffd9746",
     "bindings/kotlin/src/test/kotlin/chat/dumber/sdk/ChatClientTest.kt": "c2293d82a3c0a42d578cddc182dee0217077651b3666acb41f89b20da79e0737",
-    "workspace-Cargo.toml": "9534a4c15568506217af65b4c6ca2c4b45244f3fc74d7cd88e84a99da7b7b74b"
+    "workspace-Cargo.toml": "228a4d2901e5f01829f3464552e2893f0a07f006782fffc3e62d626734f8142c"
   },
   "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
   "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 30.0.16248370\nPkg.BaseRevision = 30.0.16248370\nPkg.ReleaseName = r30",
@@ -28,8 +29,8 @@
   "sha256": {
     "README.md": "c03b5ef8f446c4b17d94565c8ffbdaa0015c4bf9b8066d70dd308ef2667c5a34",
     "THIRD_PARTY_NOTICES.md": "8af357003fc8640931add3e4df56d7f7591a587af1fde7bdaff8d6e057c20b7f",
-    "arm64-v8a/libdumber_chat_core.so": "517f7b9e8c719dfa5612674fa9209dd4a7eb27a62846eb06d1f3e282df84e6bb",
-    "armeabi-v7a/libdumber_chat_core.so": "effc6461bebcaa8fef19b06cc633e0695f5b62caee0a19bae7f1eedf2c42c4bd",
+    "arm64-v8a/libdumber_chat_core.so": "892ff3f8c82fcf63fce7d6e960f6da3350b645db5c5c9d59a87ebc5c41e7df38",
+    "armeabi-v7a/libdumber_chat_core.so": "73017e6598e51d49146214602ed57330d1ebc63774c62a893c60a7ef0e417d2e",
     "kotlin/README.md": "889bb18bfab552c4d88029039aa8b01b06da98fe24fcb691fa8c56cfa5dc767a",
     "kotlin/consumer-rules.pro": "4f896fb2ed5ed4f256880a61dddb8022379cd338949b6b299fc7edc3bbd6312d",
     "kotlin/src/main/kotlin/chat/dumber/sdk/ChatApi.kt": "3441f7dcf865ef2fbb12f7409f97ce4cd57147d2d4d23774de1e83404d192fae",

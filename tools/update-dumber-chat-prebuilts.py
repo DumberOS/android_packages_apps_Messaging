@@ -90,10 +90,10 @@ def main():
                 f'CC_{key}': str(toolchain / f'{compiler}23-clang'),
                 f'CXX_{key}': str(toolchain / f'{compiler}23-clang++'),
                 f'AR_{key}': str(toolchain / 'llvm-ar')})
-            subprocess.run([cargo[0], 'build', *cargo[1:], '--locked', '--release', '--target', triple], env=build_env, check=True)
+            subprocess.run([cargo[0], 'build', *cargo[1:], '--locked', '--profile', 'android-size', '--target', triple], env=build_env, check=True)
             (bundle / abi).mkdir()
             subprocess.run([str(toolchain / 'llvm-strip'), '--strip-unneeded', '-o',
-                str(bundle / abi / 'libdumber_chat_core.so'), str(target / triple / 'release/libdumber_chat_core.so')], check=True)
+                str(bundle / abi / 'libdumber_chat_core.so'), str(target / triple / 'android-size/libdumber_chat_core.so')], check=True)
         shutil.copytree(core / 'bindings/kotlin', bundle / 'kotlin')
         (bundle / 'THIRD_PARTY_NOTICES.md').write_text(notices(metadata))
         (bundle / 'README.md').write_text(
@@ -106,7 +106,7 @@ def main():
         if before != source_hashes(core, workspace):
             raise RuntimeError('Source changed during build; refusing to publish mismatched artifacts')
         manifest = {
-            'format': 1, 'built_at_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'format': 1, 'cargo_profile': 'android-size', 'built_at_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'source': 'dumber.chat/crates/chat-core', 'source_sha256': before,
             'rustc': subprocess.check_output(['rustc', '--version'], text=True).strip(),
             'ndk': (args.ndk / 'source.properties').read_text().strip(), 'android_min_api': 23,

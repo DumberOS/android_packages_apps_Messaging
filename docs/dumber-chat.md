@@ -31,7 +31,7 @@ bash packages/apps/Messaging/tools/build-dumber-messaging.sh
 
 The wrapper verifies the prebuilt checksums, then builds `messaging` and `messagingtests` for `lineage_vanilla31-ap2a-userdebug`. Another lunch target can be passed as its argument. `scripts/build_all_images.sh` verifies both Messaging and Dialer prebuilts before building ROM images.
 
-Using `m messaging` directly also consumes the shipped ARM64 and ARM32 libraries. `tools/prepare-dumber-chat.sh` remains a compatibility entry point for checksum verification only. The exact JNI class name is preserved through R8. Include the complete `prebuilts/dumber-chat` directory in commits and source distributions; it is not ignored by Git.
+Using `m messaging` directly also consumes the shipped libraries. Each APK packages only the ROM target's preferred ABI (`compile_multilib: "first"`); both ARM64 and ARM32 prebuilts remain available for their respective products. `tools/prepare-dumber-chat.sh` remains a compatibility entry point for checksum verification only. The exact JNI class name is preserved through R8. Include the complete `prebuilts/dumber-chat` directory in commits and source distributions; it is not ignored by Git.
 
 ### Updating the native library (maintainers only)
 
@@ -44,7 +44,7 @@ python3 packages/apps/Messaging/tools/update-dumber-chat-prebuilts.py \
   --ndk /path/to/android-ndk-r30
 ```
 
-The updater builds both ABIs with the source checkout's Cargo lockfile and packages their matching Kotlin bindings. It records source/artifact SHA-256 hashes, compiler/NDK versions and dependency notices. It validates the staged bundle before replacing the installed bundle; failed builds leave the existing bundle intact. Run it without a concurrent ROM build and commit the entire resulting bundle together. Kotlin/JNI API changes require regenerating this bundle, not editing the copied bindings alone.
+The updater builds both ABIs with the source checkout's Cargo lockfile and `android-size` profile (size optimization, ThinLTO and one codegen unit, while preserving panic unwinding for JNI error recovery) and packages their matching Kotlin bindings. It records source/artifact SHA-256 hashes, compiler/NDK versions and dependency notices. It validates the staged bundle before replacing the installed bundle; failed builds leave the existing bundle intact. Run it without a concurrent ROM build and commit the entire resulting bundle together. Kotlin/JNI API changes require regenerating this bundle, not editing the copied bindings alone.
 
 ## Validation
 
