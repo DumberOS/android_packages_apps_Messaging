@@ -115,6 +115,7 @@ public class ViewPagerTabs extends HorizontalScrollView implements ViewPager.OnP
     public ViewPagerTabs(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
         setFillViewport(true);
+        setFocusable(false);
 
         mSidePadding = (int) (getResources().getDisplayMetrics().density * TAB_SIDE_PADDING_IN_DPS);
 
@@ -156,6 +157,7 @@ public class ViewPagerTabs extends HorizontalScrollView implements ViewPager.OnP
 
     private void addTab(CharSequence tabTitle, final int position) {
         final TextView textView = new TextView(getContext());
+        DpadNavigation.focusable(textView);
         textView.setText(tabTitle);
         textView.setBackgroundResource(R.drawable.contact_picker_tab_background_selector);
         textView.setGravity(Gravity.CENTER);

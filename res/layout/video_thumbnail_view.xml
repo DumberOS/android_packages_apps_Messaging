@@ -27,6 +27,7 @@
         app:cornerRadius="@dimen/attachment_rounded_corner_radius" />
 
     <ImageButton
+        android:foreground="@drawable/dpad_focus"
         android:id="@+id/video_thumbnail_play_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

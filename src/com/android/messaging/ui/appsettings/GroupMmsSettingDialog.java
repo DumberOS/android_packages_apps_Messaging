@@ -70,12 +70,14 @@ public class GroupMmsSettingDialog {
                 rootView.findViewById(R.id.disable_group_mms_button);
         final RadioButton enableButton = (RadioButton)
                 rootView.findViewById(R.id.enable_group_mms_button);
+        com.android.messaging.ui.DpadNavigation.focusable(disableButton);
         disableButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View view) {
                 changeGroupMmsSettings(false);
             }
         });
+        com.android.messaging.ui.DpadNavigation.focusable(enableButton);
         enableButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View view) {

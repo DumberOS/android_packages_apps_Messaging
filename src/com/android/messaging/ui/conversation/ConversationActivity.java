@@ -25,12 +25,16 @@ import android.os.Bundle;
 import androidx.appcompat.app.ActionBar;
 import android.text.TextUtils;
 import android.view.MenuItem;
+import android.view.KeyEvent;
+import android.view.View;
+import android.widget.EditText;
 
 import com.android.messaging.R;
 import com.android.messaging.datamodel.MessagingContentProvider;
 import com.android.messaging.datamodel.data.MessageData;
 import com.android.messaging.ui.BugleActionBarActivity;
 import com.android.messaging.ui.UIIntents;
+import com.android.messaging.ui.DpadNavigation;
 import com.android.messaging.ui.contact.ContactPickerFragment;
 import com.android.messaging.ui.contact.ContactPickerFragment.ContactPickerFragmentHost;
 import com.android.messaging.ui.conversation.ConversationActivityUiState.ConversationActivityUiStateHost;
@@ -58,6 +62,28 @@ public class ConversationActivity extends BugleActionBarActivity
 
     // Tracks whether onPause is called.
     private boolean mIsPaused;
+    private View mOverflowButton;
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (hasWindowFocus() && getActionMode() == null) {
+            final SimSelectorView sims = findViewById(R.id.sim_selector);
+            if (sims != null && sims.handleDpadKeyEvent(event)) return true;
+            if (sims == null || !sims.isOpen()) {
+                if (mOverflowButton == null || !mOverflowButton.isShown()) {
+                    mOverflowButton = DpadNavigation.overflowButton(
+                            findViewById(androidx.appcompat.R.id.action_bar_container));
+                }
+                final EditText editor = findViewById(R.id.compose_message_text);
+                View send = findViewById(R.id.send_message_button);
+                if (send == null || !send.isShown()) send = findViewById(R.id.self_send_icon);
+                if (editor != null && DpadNavigation.navigateChatControls(event, getCurrentFocus(), editor,
+                        send, mOverflowButton, findViewById(R.id.action_call),
+                        findViewById(android.R.id.list))) return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
@@ -153,6 +179,10 @@ public class ConversationActivity extends BugleActionBarActivity
     @Override
     public void onWindowFocusChanged(final boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && getActionMode() == null) {
+            mOverflowButton = DpadNavigation.overflowButton(
+                    findViewById(androidx.appcompat.R.id.action_bar_container));
+        }
         final ConversationFragment conversationFragment = getConversationFragment();
         // When the screen is turned on, the last used activity gets resumed, but it gets
         // window focus only after the lock screen is unlocked.
@@ -358,6 +388,12 @@ public class ConversationActivity extends BugleActionBarActivity
     @Override
     public boolean shouldResumeComposeMessage() {
         return mUiState.shouldResumeComposeMessage();
+    }
+
+    @Override
+    public boolean shouldFocusMessageEditor() {
+        // Recipient selection must keep its focus while a new conversation is assembled.
+        return !mUiState.shouldShowContactPickerFragment();
     }
 
     @SuppressWarnings("MissingSuperCall") // TODO: fix me

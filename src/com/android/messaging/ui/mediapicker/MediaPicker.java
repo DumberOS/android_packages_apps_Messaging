@@ -550,6 +550,12 @@ public class MediaPicker extends Fragment implements DraftMessageSubscriptionDat
         if (mSelectedChooser != null) {
             mSelectedChooser.onFullScreenChanged(false);
             mSelectedChooser.onOpenedChanged(true);
+            final View tab = mSelectedChooser.getTabButton();
+            if (tab != null) {
+                tab.post(() -> {
+                    if (mOpen && !tab.isInTouchMode()) tab.requestFocus();
+                });
+            }
         }
     }
 

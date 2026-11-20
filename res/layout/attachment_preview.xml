@@ -33,6 +33,7 @@
             android:layout_marginTop="10dp" />
 
         <ImageButton
+            android:foreground="@drawable/dpad_focus"
             android:id="@+id/close_button"
             style="@style/AttachmentPreviewCloseButtonStyle"
             android:layout_width="wrap_content"

@@ -53,6 +53,9 @@ public abstract class CustomHeaderPagerListViewHolder extends BasePagerViewHolde
                 false /* attachToRoot */);
         final ListView listView = (ListView) view.findViewById(getListViewResId());
         listView.setAdapter(mListAdapter);
+        // ListView owns keyboard selection; its center-key action must use the same
+        // callback as tapping a row (including contact selection and deselection).
+        listView.setOnItemClickListener((parent, item, position, id) -> item.performClick());
         listView.setOnScrollListener(new OnScrollListener() {
             @Override
             public void onScrollStateChanged(final AbsListView view, final int scrollState) {

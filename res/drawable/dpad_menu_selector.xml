@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Match keyboard focus elsewhere while retaining the menu's touch feedback. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:drawable="@drawable/dpad_focus" />
+    <item android:drawable="@drawable/focus_item_background" />
+</selector>

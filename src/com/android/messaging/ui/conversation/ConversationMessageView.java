@@ -82,6 +82,7 @@ import java.util.List;
 public class ConversationMessageView extends FrameLayout implements View.OnClickListener,
         View.OnLongClickListener, OnAttachmentClickListener {
     public interface ConversationMessageViewHost {
+        void showMessageActions(ConversationMessageView view);
         boolean onAttachmentClick(ConversationMessageView view, MessagePartData attachment,
                 Rect imageBounds, boolean longPress);
         SubscriptionListEntry getSubscriptionEntryForSelfParticipant(String selfParticipantId,
@@ -118,6 +119,37 @@ public class ConversationMessageView extends FrameLayout implements View.OnClick
         super(context, attrs);
         // TODO: we should switch to using Binding and DataModel factory methods.
         mData = new ConversationMessageData();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        return com.android.messaging.ui.DpadNavigation.moveBetweenMessages(this, event)
+                || super.dispatchKeyEvent(event);
+    }
+
+    private boolean isMessageActionKey(int keyCode, android.view.KeyEvent event) {
+        return isFocused() && mHost != null && event.hasNoModifiers()
+                && (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                        || keyCode == android.view.KeyEvent.KEYCODE_ENTER
+                        || keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if (isMessageActionKey(keyCode, event)) {
+            if (event.getRepeatCount() == 0) event.startTracking();
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        if (isMessageActionKey(keyCode, event)) {
+            if (event.isTracking() && !event.isCanceled()) mHost.showMessageActions(this);
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override
@@ -780,7 +812,11 @@ public class ConversationMessageView extends FrameLayout implements View.OnClick
         }
 
         // Update the message row and message bubble views
-        setPadding(getPaddingLeft(), messageTopPadding, getPaddingRight(), 0);
+        // Center the bubble within its focus outline instead of putting the entire
+        // inter-message gap above it. Keep clustered messages closely spaced.
+        final int messageVerticalPadding = Math.round(messageTopPadding / 2f);
+        setPadding(getPaddingLeft(), messageVerticalPadding, getPaddingRight(),
+                messageVerticalPadding);
         mMessageBubble.setGravity(gravity);
         updateMessageAttachmentsAppearance(gravity);
 

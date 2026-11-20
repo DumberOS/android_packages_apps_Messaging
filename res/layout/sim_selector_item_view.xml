@@ -22,7 +22,9 @@
     android:orientation="horizontal"
     android:background="?android:attr/selectableItemBackground"
     android:padding="12dp"
-    android:clipToPadding="false">
+    android:clipToPadding="false"
+    android:focusable="false"
+    android:descendantFocusability="blocksDescendants">
 
     <LinearLayout
         android:id="@+id/details_container"

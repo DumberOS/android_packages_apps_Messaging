@@ -22,7 +22,9 @@
     android:gravity="center_vertical"
     android:background="?android:attr/selectableItemBackground"
     android:clickable="true"
-    style="@style/PeopleAndOptionsItemStyle">
+    style="@style/PeopleAndOptionsItemStyle"
+    android:focusable="false"
+    android:descendantFocusability="blocksDescendants">
 
     <LinearLayout
         android:layout_width="0dp"

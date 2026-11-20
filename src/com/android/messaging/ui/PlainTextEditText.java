@@ -34,6 +34,11 @@ public class PlainTextEditText extends EditText {
         super(context, attrs);
     }
 
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        return DpadNavigation.leaveEditor(this, keyCode, event) || super.onKeyDown(keyCode, event);
+    }
+
     // Intercept and modify the paste event. Let everything else through unchanged.
     @Override
     public boolean onTextContextMenuItem(final int id) {

@@ -20,6 +20,8 @@
     android:layout_height="match_parent">
 
     <ListView
+        android:listSelector="@drawable/dpad_focus"
+        android:drawSelectorOnTop="true"
         android:id="@+id/frequent_contacts_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

@@ -20,7 +20,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:addStatesFromChildren="true"
-    android:focusable="true">
+    android:focusable="true"
+    android:foreground="@drawable/dpad_focus">
 
     <!-- The background displayed when the conversation is swiped sideways -->
     <LinearLayout

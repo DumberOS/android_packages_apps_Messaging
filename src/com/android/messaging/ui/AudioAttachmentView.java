@@ -108,6 +108,7 @@ public class AudioAttachmentView extends LinearLayout {
         super.onFinishInflate();
 
         mPlayPauseButton = (AudioAttachmentPlayPauseButton) findViewById(R.id.play_pause_button);
+        DpadNavigation.focusable(mPlayPauseButton);
         mChronometer = (PausableChronometer) findViewById(R.id.timer);
         mProgressBar = (AudioPlaybackProgressBar) findViewById(R.id.progress);
         mPlayPauseButton.setOnClickListener(new OnClickListener() {

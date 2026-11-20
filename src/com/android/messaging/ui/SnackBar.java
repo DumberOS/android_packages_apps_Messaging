@@ -291,6 +291,7 @@ public class SnackBar {
         } else {
             mActionTextView.setVisibility(View.VISIBLE);
             mActionTextView.setText(mAction.getActionLabel());
+            DpadNavigation.focusable(mActionTextView);
             mActionTextView.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(final View v) {

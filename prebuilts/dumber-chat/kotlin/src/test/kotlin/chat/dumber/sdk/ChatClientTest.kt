@@ -16,6 +16,25 @@ class ChatClientTest {
         listOf(GroupMember(Contact("contact_a",null),Membership.JOINED,true)),GroupCapabilities(true,true),emptyList(),Membership.JOINED)
     private val message = Message("event_a",Contact("contact_a",null),42,MessageContent.Text("quote \" newline\n💬"),true,"retry-id")
 
+    @Test fun callingRegistrationExplicitlySelectsCallsSlot() {
+        val operations = mutableListOf<String>()
+        val client = ChatClient(ChatConfig("http://127.0.0.1:9")) { request ->
+            val operation = JSONObject(request).getJSONObject("operation")
+            assertEquals("calls", operation.getString("registration_kind"))
+            assertEquals("+15555550101", operation.getString("phone"))
+            val command = operation.getString("command")
+            operations.add(command)
+            if (command == "request_code") """{"ok":true,"data":{"status":"pending","development":true}}"""
+            else {
+                assertEquals("123456", operation.getString("code"))
+                """{"ok":true,"data":${ChatStorage.encodeSession(session)}}"""
+            }
+        }
+        assertEquals("pending", client.requestCode("+15555550101", RegistrationKind.CALLS).status)
+        assertEquals(session, client.verify("+15555550101", "123456", RegistrationKind.CALLS))
+        assertEquals(listOf("request_code", "verify"), operations)
+    }
+
     @Test fun callSignalsStayTypedAndSeparateFromMessages() {
         val signal=CallSignal(CallKind.CANDIDATES,"call-a","party-b",1234,
             candidates=listOf(IceCandidate("candidate:1","0",0)))

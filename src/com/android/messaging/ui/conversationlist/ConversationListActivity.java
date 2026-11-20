@@ -23,18 +23,27 @@ import android.content.IntentFilter;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import androidx.appcompat.app.ActionBar;
+import androidx.recyclerview.widget.RecyclerView;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
+
+import java.util.ArrayList;
 
 import com.android.messaging.R;
 import com.android.messaging.dumber.DumberChat;
 import com.android.messaging.ui.UIIntents;
+import com.android.messaging.ui.DpadNavigation;
 import com.android.messaging.util.DebugUtils;
 import com.android.messaging.util.Trace;
 
 public class ConversationListActivity extends AbstractConversationListActivity {
     private boolean mChatActivated;
     private int mChatStateGeneration;
+    private View mOverflowButton;
+    private long mLastFocusedConversationId = RecyclerView.NO_ID;
     private final BroadcastReceiver mChatStateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -51,6 +60,82 @@ public class ConversationListActivity extends AbstractConversationListActivity {
                 supportInvalidateOptionsMenu();
             }
         });
+    }
+
+    private View getOverflowButton() {
+        final ArrayList<View> candidates = new ArrayList<>();
+        getWindow().getDecorView().findViewsWithText(candidates,
+                getString(R.string.abc_action_menu_overflow_description),
+                View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION);
+        for (View candidate : candidates) {
+            if (candidate.isShown() && candidate.isEnabled()) {
+                if (candidate != mOverflowButton) {
+                    DpadNavigation.focusable(candidate);
+                    mOverflowButton = candidate;
+                }
+                // AppCompat puts the touchscreen focus barrier on the container,
+                // rather than the Toolbar itself, on Android 8 and newer.
+                final View container = findViewById(androidx.appcompat.R.id.action_bar_container);
+                if (container instanceof ViewGroup) {
+                    ((ViewGroup) container).setTouchscreenBlocksFocus(false);
+                    container.setKeyboardNavigationCluster(false);
+                }
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private View getConversationFocusTarget(RecyclerView list) {
+        if (mLastFocusedConversationId != RecyclerView.NO_ID) {
+            final RecyclerView.ViewHolder holder =
+                    list.findViewHolderForItemId(mLastFocusedConversationId);
+            if (holder != null) return holder.itemView;
+        }
+        for (int i = 0; i < list.getChildCount(); i++) {
+            final View row = list.getChildAt(i);
+            if (list.getChildAdapterPosition(row) != RecyclerView.NO_POSITION
+                    && row.hasFocusable()) return row;
+        }
+        return findViewById(R.id.start_new_conversation_button);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.hasNoModifiers()
+                && hasWindowFocus() && !isInConversationListSelectMode()
+                && mConversationListFragment != null) {
+            final RecyclerView list = mConversationListFragment.getRecyclerView();
+            final View focus = getCurrentFocus();
+            if (list != null) {
+                final View row = focus == null ? null : list.findContainingItemView(focus);
+                final View compose = findViewById(R.id.start_new_conversation_button);
+                View target = null;
+                final int key = event.getKeyCode();
+                if (row != null || focus == list) {
+                    if (row != null) mLastFocusedConversationId = list.getChildItemId(row);
+                    // Full-width rows overlap the floating button, so geometric focus
+                    // search cannot reliably reach it or the action-bar overflow.
+                    if (key == KeyEvent.KEYCODE_DPAD_RIGHT) target = compose;
+                    else if (key == KeyEvent.KEYCODE_DPAD_UP
+                            && (row == null || list.getChildAdapterPosition(row) == 0)) {
+                        target = getOverflowButton();
+                    }
+                } else if (focus != null && focus == compose) {
+                    if (key == KeyEvent.KEYCODE_DPAD_LEFT) target = getConversationFocusTarget(list);
+                    else if (key == KeyEvent.KEYCODE_DPAD_UP) target = getOverflowButton();
+                } else if (focus != null && focus == mOverflowButton) {
+                    if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        target = getConversationFocusTarget(list);
+                    } else if (key == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        target = compose;
+                    }
+                }
+                if (target != null && target != focus && target.isShown() && target.isEnabled()
+                        && target.requestFocus()) return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
@@ -174,6 +259,7 @@ public class ConversationListActivity extends AbstractConversationListActivity {
     @Override
     public void onWindowFocusChanged(final boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && !isInConversationListSelectMode()) getOverflowButton();
         final ConversationListFragment conversationListFragment =
                 (ConversationListFragment) getFragmentManager().findFragmentById(
                         R.id.conversation_list_fragment);

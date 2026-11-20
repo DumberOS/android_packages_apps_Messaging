@@ -50,6 +50,14 @@ import java.util.concurrent.Executors;
  * recipients in the form of a ParticipantData list.
  */
 public class ContactRecipientAutoCompleteView extends RecipientEditTextView {
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Suggestions must retain their own Up/Down/Center handling.
+        if (!isPopupShowing() && com.android.messaging.ui.DpadNavigation.leaveEditor(
+                this, keyCode, event)) return true;
+        return super.onKeyDown(keyCode, event);
+    }
+
     public interface ContactChipsChangeListener {
         void onContactChipsChanged(int oldCount, int newCount);
         void onInvalidContactChipsPruned(int prunedCount);

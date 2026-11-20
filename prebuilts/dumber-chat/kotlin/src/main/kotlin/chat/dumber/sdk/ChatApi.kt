@@ -4,6 +4,10 @@ package chat.dumber.sdk
 interface ChatApi {
     fun requestCode(phone: String): CodeRequest
     fun verify(phone: String, code: String): Session
+    fun requestCode(phone: String, kind: RegistrationKind): CodeRequest =
+        if (kind == RegistrationKind.MESSAGING) requestCode(phone) else throw ChatException("Separate calling registration unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun verify(phone: String, code: String, kind: RegistrationKind): Session =
+        if (kind == RegistrationKind.MESSAGING) verify(phone, code) else throw ChatException("Separate calling registration unsupported", ErrorKind.UPGRADE_REQUIRED)
     fun sessionStatus(): SessionStatus
     fun reviewPairing(code: String): PairingReview
     fun approvePairing(code: String): PairingReview

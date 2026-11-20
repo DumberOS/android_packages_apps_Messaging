@@ -72,6 +72,7 @@
                     android:orientation="horizontal">
 
                     <ImageButton
+                        android:foreground="@drawable/dpad_focus"
                         android:id="@+id/attach_media_button"
                         style="@style/ComposeMessageViewAttachMediaButtonStyle"
                         android:layout_width="wrap_content"
@@ -126,6 +127,7 @@
                         app:reveal="true"
                         android:clickable="true" />
                     <ImageButton
+                        android:foreground="@drawable/dpad_focus"
                         android:id="@+id/send_message_button"
                         android:layout_width="@dimen/conversation_message_contact_icon_size"
                         android:layout_height="@dimen/conversation_message_contact_icon_size"

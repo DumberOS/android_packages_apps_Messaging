@@ -19,6 +19,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
     <com.android.messaging.ui.mediapicker.GalleryGridView
+        android:listSelector="@drawable/dpad_focus"
+        android:drawSelectorOnTop="true"
         android:id="@+id/gallery_grid_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

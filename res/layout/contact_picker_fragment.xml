@@ -22,6 +22,8 @@
     android:orientation="vertical">
 
     <androidx.appcompat.widget.Toolbar
+        android:touchscreenBlocksFocus="false"
+        android:keyboardNavigationCluster="false"
         android:id="@+id/toolbar"
         android:layout_height="wrap_content"
         android:layout_width="match_parent"

@@ -64,7 +64,8 @@
             android:layout_gravity="center"
             android:padding="30dp"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            android:focusableInTouchMode="false"
+            android:foreground="@drawable/dpad_focus"
             android:contentDescription="@string/audio_record_view_content_description" >
 
             <ImageView

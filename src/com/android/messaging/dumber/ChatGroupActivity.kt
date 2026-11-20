@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.provider.ContactsContract
 import android.view.View
+import android.view.KeyEvent
 import android.os.Bundle
 import android.widget.*
 import chat.dumber.sdk.*
@@ -17,6 +18,7 @@ import android.view.inputmethod.EditorInfo
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.android.messaging.R
+import com.android.messaging.ui.DpadNavigation
 
 class ChatGroupActivity : ChatActivity() {
     companion object {
@@ -36,9 +38,27 @@ class ChatGroupActivity : ChatActivity() {
     private var send: ImageButton? = null
     private var sending = false
     private var initialTimeline = true
+    private var initialComposeFocus = true
     private var scrollToLatest = false
     private var savedScroll: Parcelable? = null
     private var loadGeneration = 0
+    private var overflow: View? = null
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (hasWindowFocus()) {
+            if (overflow?.isShown != true) overflow = DpadNavigation.overflowButton(toolbar)
+            if (DpadNavigation.navigateChatControls(event, currentFocus, entry, send, overflow,
+                    null, timeline)) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) overflow = DpadNavigation.overflowButton(toolbar)
+    }
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         key = state?.getString("key") ?: intent.getStringExtra("group")
@@ -70,6 +90,7 @@ class ChatGroupActivity : ChatActivity() {
         composer = findViewById(R.id.group_composer)
         messages = ChatGroupMessages { pending -> showPending(pending) }
         timeline = findViewById<RecyclerView>(R.id.group_messages).apply {
+            isFocusable = false
             layoutManager = LinearLayoutManager(this@ChatGroupActivity).apply { stackFromEnd = true }
             adapter = messages
         }
@@ -100,6 +121,8 @@ class ChatGroupActivity : ChatActivity() {
         val body = entry?.text?.toString().orEmpty()
         if (sending || !canSend(screen) || body.isBlank()) return
         sending = true
+        // Disabling the focused send button otherwise sends focus back into history.
+        if (send?.hasFocus() == true && send?.isInTouchMode == false) entry?.requestFocus()
         updateSendButton()
         val app = applicationContext
         DumberChat.task(this, { runCatching {
@@ -193,6 +216,11 @@ class ChatGroupActivity : ChatActivity() {
                 renderActions(state)
             }
             composer?.visibility = if (canSend(state)) View.VISIBLE else View.GONE
+            // The composer is hidden until the group loads. Focus it once it is available,
+            // without stealing focus from history on subsequent message refreshes.
+            if (initialComposeFocus && canSend(state) && entry?.requestFocus() == true) {
+                initialComposeFocus = false
+            }
             updateSendButton()
             val list = timeline!!
             val manager = list.layoutManager as LinearLayoutManager

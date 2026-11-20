@@ -3,6 +3,7 @@ package com.android.messaging.dumber
 import android.content.Context
 import android.graphics.Typeface
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -10,6 +11,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.android.messaging.R
+import com.android.messaging.ui.DpadNavigation
 import chat.dumber.sdk.MessageContent
 
 /** Reuses Messaging's bubble shapes and colours while keeping group storage independent. */
@@ -79,11 +81,25 @@ internal class ChatGroupMessages(private val pendingClick: (PendingText) -> Unit
         holder.status.text = if (row.status.isBlank()) time else "$time · ${row.status}"
         holder.status.setTextColor(context.getColor(if (row.outgoing) R.color.timestamp_text_outgoing
             else R.color.timestamp_text_incoming))
-        holder.bubble.setOnClickListener(row.pending?.let { p -> View.OnClickListener { pendingClick(p) } })
+        val pendingAction = row.pending?.let { p -> View.OnClickListener { pendingClick(p) } }
+        holder.line.setOnClickListener(pendingAction)
+        holder.line.isClickable = row.pending != null
+        holder.bubble.setOnClickListener(pendingAction)
         holder.bubble.isClickable = row.pending != null
-        holder.bubble.isFocusable = row.pending != null
     }
-    class Holder(context: Context, maxWidth: Int) : RecyclerView.ViewHolder(LinearLayout(context)) {
+    class Holder(context: Context, maxWidth: Int) : RecyclerView.ViewHolder(
+        object : LinearLayout(context) {
+            override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+                DpadNavigation.moveBetweenMessages(this, event) || super.dispatchKeyEvent(event)
+
+            override fun addFocusables(views: ArrayList<View>, direction: Int, mode: Int) {
+                // One keyboard stop for the whole message. Selectable text may still
+                // request touch focus directly, so long-touch copy keeps working.
+                if (isInTouchMode) super.addFocusables(views, direction, mode)
+                else if (isFocusable) views.add(this)
+            }
+        }
+    ) {
         val line = itemView as LinearLayout
         val bubble = LinearLayout(context)
         val sender = TextView(context)
@@ -94,7 +110,10 @@ internal class ChatGroupMessages(private val pendingClick: (PendingText) -> Unit
             line.orientation = LinearLayout.HORIZONTAL
             line.layoutParams = RecyclerView.LayoutParams(-1, -2)
             line.setPadding(dp(12), dp(3), dp(12), dp(3))
+            DpadNavigation.focusable(line)
+            line.descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
             bubble.orientation = LinearLayout.VERTICAL
+            bubble.isFocusable = false
             bubble.setPadding(dp(16), dp(10), dp(16), dp(10))
             line.addView(bubble, LinearLayout.LayoutParams(-2, -2))
             listOf(sender, body, status).forEach { text ->

@@ -49,6 +49,10 @@ public class AttachmentGridView extends GridView implements
     public AttachmentGridView(final Context context, final AttributeSet attrs) {
         super(context, attrs);
         mUnselectedSet = new HashSet<>();
+        setOnItemClickListener((parent, item, position, id) ->
+                item.findViewById(com.android.messaging.R.id.checkbox).performClick());
+        setOnItemLongClickListener((parent, item, position, id) ->
+                ((AttachmentGridItemView) item).preview());
     }
 
     public void setHost(final AttachmentGridHost host) {

@@ -108,6 +108,17 @@ public class AttachmentGridItemView extends FrameLayout {
         mCheckBox.setChecked(mHostInterface.isItemSelected(mAttachmentData));
     }
 
+    /** Center toggles the checkbox; holding center opens the same preview as touch. */
+    public boolean preview() {
+        for (int id : new int[] { R.id.video_thumbnail_play_button,
+                R.id.play_pause_button, R.id.vcard_attachment_view }) {
+            View control = findViewById(id);
+            if (control != null && control.isShown() && control.isEnabled()
+                    && control.performClick()) return true;
+        }
+        return performClick();
+    }
+
     private void updateAttachmentView() {
         mAttachmentViewContainer.removeAllViews();
         final LayoutInflater inflater = LayoutInflater.from(getContext());

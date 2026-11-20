@@ -74,6 +74,8 @@ abstract class ConversationSimSelector extends ConversationInput {
 
     public void setSelected(final SubscriptionListEntry subEntry) {
         mSelectedSimText = subEntry == null ? null : subEntry.displayName;
+        ensureSimSelectorView();
+        mSimSelectorView.setSelectedSubscription(subEntry);
     }
 
     @Override

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Foreground keeps the focus indicator visible over bubbles, photos and custom backgrounds. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="#183F8CFF" />
+            <stroke android:width="2dp" android:color="#448AFF" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>

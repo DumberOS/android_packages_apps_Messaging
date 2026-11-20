@@ -38,6 +38,8 @@
     <ImageView
         style="@style/ConversationListFragmentStartNewButtonStyle"
         android:id="@+id/start_new_conversation_button"
+        android:focusable="true"
+        android:foreground="@drawable/dpad_focus"
         android:layout_width="@dimen/fab_size"
         android:layout_height="@dimen/fab_size"
         android:layout_gravity="bottom|end"

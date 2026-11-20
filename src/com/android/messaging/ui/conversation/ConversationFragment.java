@@ -63,6 +63,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.PopupMenu;
 
 import com.android.messaging.R;
 import com.android.messaging.datamodel.DataModel;
@@ -122,6 +123,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
         void onStartComposeMessage();
         void onConversationMetadataUpdated();
         boolean shouldResumeComposeMessage();
+        boolean shouldFocusMessageEditor();
         void onFinishCurrentConversation();
         void invalidateActionBar();
         ActionMode startActionMode(ActionMode.Callback callback);
@@ -174,6 +176,7 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
 
     // ConversationMessageView that is currently selected
     private ConversationMessageView mSelectedMessage;
+    private AlertDialog mMessageActionsDialog;
 
     // Attachment data for the attachment within the selected message that was long pressed
     private MessagePartData mSelectedAttachment;
@@ -510,6 +513,8 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
             final Bundle savedInstanceState) {
         final View view = inflater.inflate(R.layout.conversation_fragment, container, false);
         mRecyclerView = (RecyclerView) view.findViewById(android.R.id.list);
+        // Only message rows should receive focus, never the whole history container.
+        mRecyclerView.setFocusable(false);
         final LinearLayoutManager manager = new LinearLayoutManager(getActivity());
         manager.setStackFromEnd(true);
         manager.setReverseLayout(false);
@@ -632,7 +637,17 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
     }
 
     @Override
+    public void onViewStateRestored(final Bundle savedInstanceState) {
+        super.onViewStateRestored(savedInstanceState);
+        // Apply after framework focus restoration, once when entering this chat view.
+        if (mHost.shouldFocusMessageEditor()) {
+            mComposeMessageView.focusMessageEditor();
+        }
+    }
+
+    @Override
     public void onDestroyView() {
+        if (mMessageActionsDialog != null) mMessageActionsDialog.dismiss();
         if (mDumberControls != null) mDumberControls.stop();
         mDumberControls = null;
         super.onDestroyView();
@@ -693,6 +708,48 @@ public class ConversationFragment extends Fragment implements ConversationDataLi
 
     private void selectMessage(final ConversationMessageView messageView) {
         selectMessage(messageView, null /* attachment */);
+    }
+
+    @Override
+    public void showMessageActions(final ConversationMessageView messageView) {
+        if (mMessageActionsDialog != null) return;
+        mHost.dismissActionMode();
+        selectMessage(messageView);
+        final ActionMode mode = mHost.getActionMode();
+        if (mode == null) return;
+        final String messageId = messageView.getData().getMessageId();
+        final List<MenuItem> actions = new ArrayList<>();
+        final List<CharSequence> labels = new ArrayList<>();
+        // The toolbar menu is rebuilt asynchronously. Populate an independent menu
+        // through the same callback so its actions are ready for this key press.
+        final Menu menu = new PopupMenu(getActivity(), messageView).getMenu();
+        mMessageActionModeCallback.onCreateActionMode(mode, menu);
+        for (int i = 0; i < menu.size(); i++) {
+            final MenuItem item = menu.getItem(i);
+            if (item.isVisible() && item.isEnabled()) {
+                actions.add(item);
+                labels.add(item.getTitle());
+            }
+        }
+        mMessageActionsDialog = new AlertDialog.Builder(getActivity())
+                .setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
+                    // A message update must not redirect an action to a recycled row.
+                    if (mHost.getActionMode() == mode && mSelectedMessage != null
+                            && TextUtils.equals(messageId,
+                                    mSelectedMessage.getData().getMessageId())) {
+                        mMessageActionModeCallback.onActionItemClicked(mode, actions.get(which));
+                    }
+                })
+                .setOnDismissListener(dialog -> {
+                    mMessageActionsDialog = null;
+                    if (mHost.getActionMode() == mode) mHost.dismissActionMode();
+                    if (messageView.isAttachedToWindow() && !messageView.isInTouchMode()
+                            && TextUtils.equals(messageId, messageView.getData().getMessageId())) {
+                        messageView.requestFocus();
+                    }
+                })
+                .create();
+        mMessageActionsDialog.show();
     }
 
     private void selectMessage(final ConversationMessageView messageView,

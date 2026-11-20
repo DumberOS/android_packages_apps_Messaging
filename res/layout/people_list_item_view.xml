@@ -23,4 +23,6 @@
     android:paddingTop="8dp"
     android:paddingBottom="8dp"
     android:background="?android:attr/selectableItemBackground"
-    style="@style/PeopleListItemViewStyle" />
+    style="@style/PeopleListItemViewStyle"
+    android:focusable="false"
+    android:descendantFocusability="blocksDescendants"/>

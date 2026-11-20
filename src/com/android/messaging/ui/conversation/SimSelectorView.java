@@ -18,6 +18,7 @@ package com.android.messaging.ui.conversation;
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
@@ -51,6 +52,9 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
     private SimSelectorViewListener mListener;
     private int mItemLayoutId;
     private Map<Integer, ChatComposeState> mChatTransports;
+    private int mSelectedSubscriptionId = -1;
+    private int mConfirmKey = KeyEvent.KEYCODE_UNKNOWN;
+    private View mReturnFocus;
 
     public SimSelectorView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -62,6 +66,7 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
         super.onFinishInflate();
         mSimListView = (ListView) findViewById(R.id.sim_list);
         mSimListView.setAdapter(mAdapter);
+        mSimListView.setOnItemClickListener((parent, item, position, id) -> item.performClick());
 
         // Clicking anywhere outside the switcher list should dismiss.
         setOnClickListener(new OnClickListener() {
@@ -93,10 +98,75 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
         showOrHide(!mShow, true);
     }
 
+    public void setSelectedSubscription(SubscriptionListEntry entry) {
+        mSelectedSubscriptionId = entry == null ? -1 : entry.subscriptionId;
+    }
+
+    private int selectedSubscriptionPosition() {
+        for (int i = 0; i < mAdapter.getCount(); i++) {
+            if (mAdapter.getItem(i).subscriptionId == mSelectedSubscriptionId) return i;
+        }
+        return 0;
+    }
+
+    /** Keep navigation inside the open chooser, including when opened by touch. */
+    public boolean handleDpadKeyEvent(KeyEvent event) {
+        if (!mShow || !event.hasNoModifiers()) return false;
+        final int key = event.getKeyCode();
+        switch (key) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    int position = mSimListView.getSelectedItemPosition();
+                    if (!mSimListView.hasFocus() || position < 0) {
+                        position = selectedSubscriptionPosition();
+                    } else {
+                        position += key == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1;
+                    }
+                    mSimListView.requestFocus();
+                    mSimListView.setSelection(Math.max(0, Math.min(mAdapter.getCount() - 1, position)));
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                    mConfirmKey = key;
+                    mSimListView.requestFocus();
+                    if (mSimListView.getSelectedItemPosition() < 0) {
+                        mSimListView.setSelection(selectedSubscriptionPosition());
+                    }
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                    boolean confirm = mConfirmKey == key && !event.isCanceled();
+                    mConfirmKey = KeyEvent.KEYCODE_UNKNOWN;
+                    // The key-up that opened this chooser (a long press on Send)
+                    // must not immediately select a SIM as well.
+                    int position = mSimListView.getSelectedItemPosition();
+                    if (confirm && position >= 0 && position < mAdapter.getCount()) {
+                        onSimItemClicked(mAdapter.getItem(position));
+                    }
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_BACK:
+                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                    showOrHide(false, true);
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     public void showOrHide(final boolean show, final boolean animate) {
         final boolean oldShow = mShow;
+        final boolean restoreFocus = oldShow && !show && hasFocus() && !isInTouchMode();
         mShow = show && mAdapter.getCount() > 1;
         if (oldShow != mShow) {
+            mConfirmKey = KeyEvent.KEYCODE_UNKNOWN;
+            if (mShow) mReturnFocus = getRootView().findFocus();
             if (mListener != null) {
                 mListener.onSimSelectorVisibilityChanged(mShow);
             }
@@ -129,6 +199,23 @@ public class SimSelectorView extends FrameLayout implements SimSelectorItemView.
                 translateAnimation.setInterpolator(UiUtils.EASE_OUT_INTERPOLATOR);
                 translateAnimation.setDuration(UiUtils.REVEAL_ANIMATION_DURATION);
                 mSimListView.startAnimation(translateAnimation);
+            }
+            if (mShow) {
+                mSimListView.setSelection(selectedSubscriptionPosition());
+                if (!isInTouchMode()) {
+                    mSimListView.post(() -> {
+                        if (mShow && !isInTouchMode()) {
+                            mSimListView.requestFocus();
+                            mSimListView.setSelection(selectedSubscriptionPosition());
+                        }
+                    });
+                }
+            } else if (restoreFocus) {
+                View target = mReturnFocus;
+                if (target == null || !target.isShown() || !target.isEnabled()) {
+                    target = getRootView().findViewById(R.id.compose_message_text);
+                }
+                if (target != null) target.requestFocus();
             }
         }
     }

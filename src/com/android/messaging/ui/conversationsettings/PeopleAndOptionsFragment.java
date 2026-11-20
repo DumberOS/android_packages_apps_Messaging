@@ -86,6 +86,7 @@ public class PeopleAndOptionsFragment extends Fragment
         compositeAdapter.addPartition(new PeopleAndOptionsPartition(mPeopleListAdapter,
                 R.string.participant_list_title, true));
         mListView.setAdapter(compositeAdapter);
+        mListView.setOnItemClickListener((parent, item, position, id) -> item.performClick());
         return view;
     }
 

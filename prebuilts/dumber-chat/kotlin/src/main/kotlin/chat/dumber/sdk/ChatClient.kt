@@ -25,6 +25,8 @@ class ChatClient internal constructor(private val config: ChatConfig, private va
     private fun obj(command: String, vararg arguments: Pair<String, Any?>) = call(command, *arguments) as JSONObject
     override fun requestCode(phone: String) = obj("request_code", "phone" to phone).let { CodeRequest(it.getString("status"), it.getBoolean("development")) }
     override fun verify(phone: String, code: String) = Wire.session(obj("verify", "phone" to phone, "code" to code))
+    override fun requestCode(phone: String, kind: RegistrationKind) = obj("request_code", "phone" to phone, "registration_kind" to kind.name.lowercase(java.util.Locale.ROOT)).let { CodeRequest(it.getString("status"), it.getBoolean("development")) }
+    override fun verify(phone: String, code: String, kind: RegistrationKind) = Wire.session(obj("verify", "phone" to phone, "code" to code, "registration_kind" to kind.name.lowercase(java.util.Locale.ROOT)))
     override fun sessionStatus() = obj("session_status").let { SessionStatus(Wire.enum(it.getString("role")), it.getBoolean("main_active")) }
     override fun reviewPairing(code: String) = Wire.pairing(obj("pairing_review", "code" to code))
     override fun approvePairing(code: String) = Wire.pairing(obj("pairing_approve", "code" to code))

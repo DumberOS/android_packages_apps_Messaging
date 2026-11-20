@@ -1,5 +1,7 @@
 package chat.dumber.sdk
 
+enum class RegistrationKind { MESSAGING, CALLS, BOTH }
+
 /** Credentials are opaque. Persist through ChatStorage in encrypted storage; never log them. */
 data class Session(val credentials: String, val accountId: String, val deviceId: String, val phone: String?) {
     override fun toString() = "Session(accountId=$accountId, deviceId=$deviceId)"

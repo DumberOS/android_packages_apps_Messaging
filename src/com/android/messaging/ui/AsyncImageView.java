@@ -199,7 +199,9 @@ public class AsyncImageView extends ImageView implements MediaResourceLoadListen
             }
 
             if (getVisibility() == VISIBLE) {
-                if (mReveal) {
+                // Hiding a focused control (for example after switching SIMs) loses
+                // keyboard focus. Keep it visible while replacing its image.
+                if (mReveal && !hasFocus()) {
                     setVisibility(INVISIBLE);
                     UiUtils.revealOrHideViewWithAnimation(this, VISIBLE, null);
                 } else if (mFadeIn && !isCached) {

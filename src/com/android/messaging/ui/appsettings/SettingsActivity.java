@@ -99,6 +99,7 @@ public class SettingsActivity extends BugleActionBarActivity {
             mListView = (ListView) view.findViewById(android.R.id.list);
             mAdapter = new SettingsListAdapter(getActivity());
             mListView.setAdapter(mAdapter);
+            mListView.setOnItemClickListener((parent, item, position, id) -> item.performClick());
             return view;
         }
 

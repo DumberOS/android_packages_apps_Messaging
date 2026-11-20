@@ -19,18 +19,24 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder.OnErrorListener;
 import android.media.MediaRecorder.OnInfoListener;
 import android.net.Uri;
+import android.os.SystemClock;
+import android.view.KeyEvent;
+import android.view.View;
 
 import com.android.messaging.FakeFactory;
 import com.android.messaging.R;
 import com.android.messaging.datamodel.data.MessagePartData;
-import com.android.messaging.ui.ViewTest;
+import com.android.messaging.ui.BugleActivityInstrumentationTestCase;
+import com.android.messaging.ui.TestActivity;
 import com.android.messaging.util.FakeMediaUtil;
 
 import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 
-public class AudioRecordViewTest extends ViewTest<AudioRecordView> {
+public class AudioRecordViewTest extends BugleActivityInstrumentationTestCase<TestActivity> {
+
+    public AudioRecordViewTest() { super(TestActivity.class); }
 
     @Mock AudioRecordView.HostInterface mockHost;
     @Mock LevelTrackingMediaRecorder mockRecorder;
@@ -39,7 +45,7 @@ public class AudioRecordViewTest extends ViewTest<AudioRecordView> {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        FakeFactory.register(getInstrumentation().getContext())
+        FakeFactory.register(getInstrumentation().getTargetContext())
                 .withMediaUtil(new FakeMediaUtil(mockMediaPlayer));
     }
 
@@ -48,10 +54,18 @@ public class AudioRecordViewTest extends ViewTest<AudioRecordView> {
     }
 
     private AudioRecordView initView() {
-        final AudioRecordView view = getView();
-        view.testSetMediaRecorder(mockRecorder);
-        view.setHostInterface(mockHost);
-        return view;
+        getActivity();
+        final AudioRecordView[] result = new AudioRecordView[1];
+        getInstrumentation().runOnMainSync(() -> {
+            AudioRecordView view = (AudioRecordView) getActivity().getLayoutInflater()
+                    .inflate(R.layout.mediapicker_audio_chooser, null);
+            view.testSetMediaRecorder(mockRecorder);
+            view.setHostInterface(mockHost);
+            getActivity().setContentView(view);
+            result[0] = view;
+        });
+        getInstrumentation().waitForIdleSync();
+        return result[0];
     }
 
     public void testRecording() {
@@ -60,13 +74,13 @@ public class AudioRecordViewTest extends ViewTest<AudioRecordView> {
                 Matchers.<OnInfoListener>any(), Matchers.anyInt())).thenReturn(true);
         Mockito.when(mockRecorder.stopRecording()).thenReturn(Uri.parse("content://someaudio/2"));
         final AudioRecordView view = initView();
-        view.onRecordButtonTouchDown();
+        getInstrumentation().runOnMainSync(() -> view.onRecordButtonTouchDown());
         Mockito.verify(mockRecorder).startRecording(Matchers.<OnErrorListener>any(),
                 Matchers.<OnInfoListener>any(), Matchers.anyInt());
         Mockito.when(mockRecorder.isRecording()).thenReturn(true);
         // Record for 1 second to make it meaningful.
         sleepNoThrow(1000);
-        view.onRecordButtonTouchUp();
+        getInstrumentation().runOnMainSync(() -> view.onRecordButtonTouchUp());
         // We added some buffer to the end of the audio recording, so sleep for sometime and
         // verify audio is recorded.
         sleepNoThrow(700);
@@ -82,8 +96,32 @@ public class AudioRecordViewTest extends ViewTest<AudioRecordView> {
         }
     }
 
-    @Override
-    protected int getLayoutIdForView() {
-        return R.layout.mediapicker_audio_chooser;
+    public void testCenterHoldRecordsOnceAndReleases() {
+        Mockito.when(mockRecorder.isRecording()).thenReturn(false);
+        Mockito.when(mockRecorder.startRecording(Matchers.<OnErrorListener>any(),
+                Matchers.<OnInfoListener>any(), Matchers.anyInt())).thenReturn(true);
+        Mockito.when(mockRecorder.stopRecording()).thenReturn(Uri.parse("content://someaudio/2"));
+        final AudioRecordView view = initView();
+        final View button = view.findViewById(R.id.record_button);
+        assertFalse(button.isFocusableInTouchMode());
+        getInstrumentation().setInTouchMode(false);
+        getInstrumentation().runOnMainSync(() -> assertTrue(button.requestFocus()));
+        final long down = SystemClock.uptimeMillis();
+        getInstrumentation().runOnMainSync(() -> button.dispatchKeyEvent(new KeyEvent(down, down,
+                KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER, 0)));
+        Mockito.when(mockRecorder.isRecording()).thenReturn(true);
+        getInstrumentation().runOnMainSync(() -> button.dispatchKeyEvent(new KeyEvent(
+                down, down + 100,
+                KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER, 1)));
+        Mockito.verify(mockRecorder, Mockito.times(1)).startRecording(
+                Matchers.<OnErrorListener>any(), Matchers.<OnInfoListener>any(), Matchers.anyInt());
+        sleepNoThrow(1000);
+        getInstrumentation().runOnMainSync(() -> button.dispatchKeyEvent(new KeyEvent(down,
+                SystemClock.uptimeMillis(), KeyEvent.ACTION_UP,
+                KeyEvent.KEYCODE_DPAD_CENTER, 0)));
+        sleepNoThrow(700);
+        Mockito.verify(mockRecorder).stopRecording();
+        verifyAudioSubmitted();
     }
+
 }

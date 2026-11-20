@@ -19,7 +19,9 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/ConversationMessageViewStyle"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content" >
+    android:layout_height="wrap_content"
+    android:focusable="true"
+    android:foreground="@drawable/dpad_focus">
 
     <com.android.messaging.ui.ContactIconView
         android:id="@+id/conversation_icon"

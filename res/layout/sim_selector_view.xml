@@ -21,6 +21,8 @@
     android:background="@drawable/sim_selector_background_gradient">
 
     <ListView
+        android:listSelector="@drawable/dpad_focus"
+        android:drawSelectorOnTop="true"
         android:id="@+id/sim_list"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

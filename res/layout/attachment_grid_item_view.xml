@@ -18,7 +18,9 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="@dimen/attachment_grid_image_cell_size"
-    android:clickable="true">
+    android:clickable="true"
+    android:focusable="false"
+    android:descendantFocusability="blocksDescendants">
 
     <FrameLayout
         android:id="@+id/attachment_container"

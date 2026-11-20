@@ -72,6 +72,8 @@ public class GalleryGridView extends MediaPickerGridView implements
     public GalleryGridView(final Context context, final AttributeSet attrs) {
         super(context, attrs);
         mSelectedImages = new ArrayMap<Uri, MessagePartData>();
+        setOnItemClickListener((parent, item, position, id) -> item.performClick());
+        setOnItemLongClickListener((parent, item, position, id) -> item.performLongClick());
     }
 
     public void setHostInterface(final GalleryGridViewListener hostInterface) {

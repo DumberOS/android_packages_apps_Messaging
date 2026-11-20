@@ -215,6 +215,7 @@ public class ComposeMessageView extends LinearLayout
                         .getMaxTextLimit()) });
 
         mSelfSendIcon = (SimIconView) findViewById(R.id.self_send_icon);
+        com.android.messaging.ui.DpadNavigation.focusable(mSelfSendIcon);
         mSelfSendIcon.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -526,9 +527,13 @@ public class ComposeMessageView extends LinearLayout
 
     @Override
     public void resumeComposeMessage() {
-        mComposeEditText.requestFocus();
+        focusMessageEditor();
         mInputManager.showHideImeKeyboard(true, true);
         announceAttachmentState();
+    }
+
+    public void focusMessageEditor() {
+        mComposeEditText.requestFocus();
     }
 
     public void clearAttachments() {

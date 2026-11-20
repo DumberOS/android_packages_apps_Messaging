@@ -7,7 +7,8 @@
     android:padding="@dimen/conversation_list_item_view_padding"
     android:background="?android:attr/selectableItemBackground"
     android:focusable="true"
-    android:clickable="true">
+    android:clickable="true"
+    android:foreground="@drawable/dpad_focus">
 
     <TextView
         android:id="@+id/dumber_group_count"

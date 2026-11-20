@@ -119,7 +119,7 @@ internal object ChatAccounts {
         val store = ChatStore.get(context)
         store.save(v)
         try {
-            client().requestCode(phone)
+            client().requestCode(phone, chat.dumber.sdk.RegistrationKind.BOTH)
         } catch (e: Exception) {
             store.atomic { if (store.verification()?.nonce == v.nonce) store.clearVerification() }
             throw e
@@ -134,7 +134,7 @@ internal object ChatAccounts {
                 it.nonce == nonce && it.expiresAt > System.currentTimeMillis()
             }
                 ?: error("Request a new verification code")
-        val session = client().verify(v.phone, code)
+        val session = client().verify(v.phone, code, chat.dumber.sdk.RegistrationKind.BOTH)
         var retained = false
         try {
             store.atomic {

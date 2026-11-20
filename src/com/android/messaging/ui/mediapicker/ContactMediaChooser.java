@@ -77,6 +77,7 @@ class ContactMediaChooser extends MediaChooser {
                         false /* attachToRoot */);
         mEnabledView = view.findViewById(R.id.mediapicker_enabled);
         mMissingPermissionView = view.findViewById(R.id.missing_permission_view);
+        com.android.messaging.ui.DpadNavigation.focusable(mEnabledView);
         mEnabledView.setOnClickListener(
                 new View.OnClickListener() {
                     @Override

@@ -121,6 +121,22 @@ public class AudioRecordView extends FrameLayout implements
         mHintTextView = (TextView) findViewById(R.id.hint_text);
         mTimerTextView = (PausableChronometer) findViewById(R.id.timer_text);
         mSoundLevels.setLevelSource(mMediaRecorder.getLevelSource());
+        // Mirror press-and-hold touch recording without changing its event ownership.
+        mRecordButton.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode != android.view.KeyEvent.KEYCODE_DPAD_CENTER &&
+                    keyCode != android.view.KeyEvent.KEYCODE_ENTER) return false;
+            if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) onRecordButtonTouchDown();
+            } else if (event.getAction() == android.view.KeyEvent.ACTION_UP) {
+                if (event.isCanceled()) {
+                    stopRecording();
+                    setMode(MODE_IDLE);
+                } else {
+                    onRecordButtonTouchUp();
+                }
+            }
+            return true;
+        });
         mRecordButton.setOnTouchListener(new OnTouchListener() {
             @Override
             public boolean onTouch(final View v, final MotionEvent event) {

@@ -55,6 +55,7 @@ public class BlockedParticipantsFragment extends Fragment
         final View view =
                 inflater.inflate(R.layout.blocked_participants_fragment, container, false);
         mListView = (ListView) view.findViewById(android.R.id.list);
+        mListView.setOnItemClickListener((parent, item, position, id) -> item.performClick());
         mAdapter = new BlockedParticipantListAdapter(getActivity(), null);
         mListView.setAdapter(mAdapter);
         mBinding.bind(DataModel.get().createBlockedParticipantsData(getActivity(), this));

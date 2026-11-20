@@ -63,3 +63,13 @@ Voice, encrypted attachments, group notification replies, and scheduled encrypte
 Encrypted group chats use a persistent composer with the encrypted send icon on the right and incoming/outgoing message bubbles. The header shows the group name; its overflow menu contains Group details and Manage participants (enabled for connected, joined admins). Group details retains rename, local preferences, leave, and history deletion. Queued messages appear as outgoing bubbles with retry/discard actions on tap. Incoming sync updates the timeline without recreating the draft field or resetting its cursor, and only follows new messages when already at the bottom.
 
 Invitation actions use the saved invitation rather than requesting full group details before joining. After a successful join, details refresh when accessible; a refresh failure does not turn success into an error. Declining or leaving uses the updated local membership snapshot, without requesting details after access has ended. Participant policy is checked before joining, including unresolved numbers when a phone policy is configured.
+
+
+### Combined registration
+
+Messaging requests protocol-3 `RegistrationKind.BOTH`, reserving messaging and
+calling slots with one session and crypto store. Dialer continues to use the
+existing Binder call service; it never registers separately. A standalone client
+registering either role logs this combined client out completely. Deploy the
+matching server update before registering with this build. Existing sessions
+remain valid during the migration.

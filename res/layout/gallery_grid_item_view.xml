@@ -19,7 +19,9 @@
     android:layout_width="match_parent"
     android:layout_height="@dimen/gallery_image_cell_size"
     android:background="@color/gallery_image_default_background"
-    android:clickable="true">
+    android:clickable="true"
+    android:focusable="false"
+    android:descendantFocusability="blocksDescendants">
 
     <!-- Thumbnail for image and video contents. -->
     <com.android.messaging.ui.AsyncImageView
@@ -85,7 +87,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:focusableInTouchMode="true"
+        android:focusable="false"
         android:background="@drawable/gallery_image_background_selector" />
 
     <CheckBox
