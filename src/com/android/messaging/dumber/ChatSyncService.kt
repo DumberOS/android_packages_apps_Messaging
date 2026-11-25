@@ -66,11 +66,7 @@ class ChatSyncService : Service() {
                 break
             } catch (e: Exception) {
                 if (e is ChatException && e.kind == ErrorKind.AUTHENTICATION_REQUIRED) {
-                    val store = ChatStore.get(this)
-                    store.atomic {
-                        if (store.account(id)?.session?.credentials == a.session.credentials)
-                            ChatAccounts.disconnect(this, id, AccountStatus.REVOKED)
-                    }
+                    ChatAccounts.disconnect(this, id, AccountStatus.REVOKED, a.session.credentials)
                     break
                 }
                 nextStatus = 0
@@ -91,6 +87,8 @@ class ChatSyncService : Service() {
     }
     companion object {
         fun ensure(context: Context) {
+            // Also discover revocations recorded by an older app, when no receiver can start.
+            ChatNotifications.sessionEnded(context)
             if (
                 ChatAccounts.isDefault(context) &&
                     ChatStore.get(context).accounts().any { it.enabled } &&

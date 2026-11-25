@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dumber_account_alerts">dumber.chat account alerts</string>
+    <string name="dumber_session_ended_title">dumber.chat disconnected</string>
+    <string name="dumber_session_ended_text">Your encrypted messaging session ended. Verify your phone number to reconnect.</string>
+</resources>

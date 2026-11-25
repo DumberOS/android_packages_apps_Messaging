@@ -88,6 +88,28 @@ public class ChatStorageTest extends AndroidTestCase {
         assertFalse(store.groupEvent(event));
         assertTrue(store.group(group.getKey()).getHidden());
     }
+    public void testRevocationNoticePersistsAndReconnectKeepsHistory() {
+        Session session = new Session("old-credential", "old-account", "device", "+46123456789");
+        ChatAccount account = new ChatAccount(session, "+46123456789", 3, 42, null, "SIM",
+                "crypto", "password", 123L, AccountStatus.REVOKED);
+        store.save(account);
+        assertTrue(store.sessionNotices().isEmpty());
+        store.markSessionNotice(account);
+        store.close();
+        assertTrue(store.sessionNotices().contains(ChatSessionAlerts.INSTANCE.key(account)));
+        store.resolveRevocations("+46987654321");
+        assertEquals(AccountStatus.REVOKED, store.account("old-account").getStatus());
+        store.resolveRevocations("+46123456789");
+        assertEquals(AccountStatus.LOGGED_OUT, store.account("old-account").getStatus());
+        assertEquals("crypto", store.account("old-account").getStoreName());
+        assertEquals(session, store.account("old-account").getSession());
+        assertTrue(ChatSessionAlerts.INSTANCE.pending(store.accounts()).isEmpty());
+        ChatAccount next = new ChatAccount(new Session("new-credential", "old-account", "device",
+                "+46123456789"), "+46123456789", 3, 42, null, "SIM", "crypto", "password",
+                456L, AccountStatus.REVOKED);
+        store.save(next);
+        assertFalse(store.sessionNotices().contains(ChatSessionAlerts.INSTANCE.key(next)));
+    }
     public void testTypedNativeBridgeLoadsAndReportsValidationError() {
         assertTrue(ChatClient.isAvailable());
         try {

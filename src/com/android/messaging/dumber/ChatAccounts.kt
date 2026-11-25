@@ -160,6 +160,7 @@ internal object ChatAccounts {
                         store.queueLogout(it.session)
                         store.save(it.copy(status = AccountStatus.LOGGED_OUT))
                     }
+                store.resolveRevocations(v.phone)
                 val sameDevice = old?.session?.deviceId == session.deviceId
                 store.save(
                     ChatAccount(
@@ -191,11 +192,15 @@ internal object ChatAccounts {
         DumberChat.changed(context)
         SimRemovalUi.refresh(context)
     }
-    fun disconnect(context: Context, account: String, status: AccountStatus) {
+    fun disconnect(
+        context: Context, account: String, status: AccountStatus, rejectedCredentials: String? = null
+    ) {
         val store = ChatStore.get(context)
         store.atomic {
             val a = store.account(account) ?: return@atomic
-            if (!a.enabled) return@atomic
+            if (!a.enabled ||
+                (rejectedCredentials != null && a.session.credentials != rejectedCredentials))
+                return@atomic
             store.queueLogout(a.session)
             store.save(a.copy(status = status))
             store.clearSimChoice(account)
@@ -205,6 +210,7 @@ internal object ChatAccounts {
         ChatCalls.changed()
         DumberChat.changed(context)
         SimRemovalUi.refresh(context)
+        ChatNotifications.sessionEnded(context)
     }
     fun flushLogouts(context: Context): Boolean {
         val store = ChatStore.get(context)

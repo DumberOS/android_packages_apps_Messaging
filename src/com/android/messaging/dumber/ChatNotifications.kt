@@ -82,6 +82,43 @@ internal object ChatNotifications {
                     .build()
             )
     }
+    /** Serialize the snapshot, posting and acknowledgement with account changes. */
+    fun sessionEnded(c: Context) {
+        runCatching {
+            val store = ChatStore.get(c)
+            store.atomic {
+                // Also reconcile accounts re-registered before this version was installed.
+                store.accounts().filter { it.enabled }.forEach { store.resolveRevocations(it.phone) }
+                val pending = ChatSessionAlerts.pending(store.accounts())
+                val manager = c.getSystemService(NotificationManager::class.java)
+                val tag = "dumber_session_ended"
+                if (pending.isEmpty()) {
+                    manager.cancel(tag, 8092)
+                    return@atomic
+                }
+                val notified = store.sessionNotices()
+                if (pending.all { ChatSessionAlerts.key(it) in notified }) return@atomic
+                val channel = "dumber_account_alerts"
+                manager.createNotificationChannel(NotificationChannel(channel,
+                    c.getString(R.string.dumber_account_alerts), NotificationManager.IMPORTANCE_HIGH))
+                // A blocked notification must remain eligible after permission is granted.
+                if (!manager.areNotificationsEnabled() ||
+                    manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE)
+                    return@atomic
+                manager.notify(tag, 8092, NotificationCompat.Builder(c, channel)
+                    .setSmallIcon(R.drawable.ic_sms_light)
+                    .setContentTitle(c.getString(R.string.dumber_session_ended_title))
+                    .setContentText(c.getString(R.string.dumber_session_ended_text))
+                    .setStyle(NotificationCompat.BigTextStyle()
+                        .bigText(c.getString(R.string.dumber_session_ended_text)))
+                    .setContentIntent(open(c))
+                    .setAutoCancel(true).setOnlyAlertOnce(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH).build())
+                pending.forEach { store.markSessionNotice(it) }
+            }
+        }
+    }
     fun cancel(c: Context, id: String) {
         manager(c).cancel(id, 8092)
     }

@@ -144,6 +144,22 @@ internal class ChatStore private constructor(context: Context) :
             text(account.status.name)
         }
     @Synchronized
+    fun sessionNotices(): Set<String> = records("session_notice") { text() }.toSet()
+
+    @Synchronized
+    fun markSessionNotice(account: ChatAccount) {
+        val key = ChatSessionAlerts.key(account)
+        save("session_notice", account.id) { text(key) }
+    }
+
+    /** Re-registration can create a new account ID; retain the old history without its warning. */
+    @Synchronized
+    fun resolveRevocations(phone: String) {
+        accounts().filter { it.phone == phone && it.status == AccountStatus.REVOKED }
+            .forEach { save(it.copy(status = AccountStatus.LOGGED_OUT)) }
+    }
+
+    @Synchronized
     fun simChoices() = records("sim_choice") { SimRemovalChoice(text(), text(), readBoolean()) }
     @Synchronized
     fun save(choice: SimRemovalChoice) = save("sim_choice", choice.account) {
