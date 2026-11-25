@@ -3,6 +3,8 @@ package com.android.messaging.ui;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.inputmethod.BaseInputConnection;
+import android.view.inputmethod.EditorInfo;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
@@ -87,6 +89,86 @@ public class DpadNavigationTest extends android.test.ActivityInstrumentationTest
         assertTrue("Right at the end of the draft reaches Send", send.hasFocus());
         key(KeyEvent.KEYCODE_DPAD_CENTER);
         assertEquals(1, clicks);
+    }
+
+    private void sendFromEditor() {
+        composer();
+        ui(() -> entry.setOnEditorActionListener((view, action, event) -> {
+            if (action != EditorInfo.IME_ACTION_SEND) return false;
+            clicks++;
+            return true;
+        }));
+    }
+
+    // Dispatch to the editor directly to exercise exactly what remains after IME handling.
+    private void centerEvent(long press, int action, int repeat, int flags) {
+        ui(() -> entry.dispatchKeyEvent(new KeyEvent(press, SystemClock.uptimeMillis(),
+                action, KeyEvent.KEYCODE_DPAD_CENTER, repeat, 0,
+                android.view.KeyCharacterMap.VIRTUAL_KEYBOARD, 0, flags)));
+    }
+
+    public void testEditorCenterSendsOnceOnRelease() {
+        sendFromEditor();
+        long press = SystemClock.uptimeMillis();
+        centerEvent(press, KeyEvent.ACTION_DOWN, 0, 0);
+        assertEquals(0, clicks);
+        centerEvent(press, KeyEvent.ACTION_DOWN, 1, KeyEvent.FLAG_LONG_PRESS);
+        centerEvent(press, KeyEvent.ACTION_UP, 0, 0);
+        centerEvent(press, KeyEvent.ACTION_UP, 0, 0);
+        assertEquals(1, clicks);
+        assertTrue(entry.hasFocus());
+    }
+
+    public void testEditorCenterReleaseAfterImeAcceptedWordDoesNotSend() {
+        sendFromEditor();
+        // TT9 handled the down event and committed its word; only up reaches the app.
+        centerEvent(SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, 0, 0);
+        assertEquals(0, clicks);
+    }
+
+    public void testEditorCenterDoesNotSendComposingWord() {
+        sendFromEditor();
+        ui(() -> BaseInputConnection.setComposingSpans(entry.getText()));
+        long press = SystemClock.uptimeMillis();
+        centerEvent(press, KeyEvent.ACTION_DOWN, 0, 0);
+        ui(() -> BaseInputConnection.removeComposingSpans(entry.getText()));
+        centerEvent(press, KeyEvent.ACTION_UP, 0, 0);
+        assertEquals(0, clicks);
+    }
+
+    public void testEditorCenterChecksCompositionAgainOnRelease() {
+        sendFromEditor();
+        long press = SystemClock.uptimeMillis();
+        centerEvent(press, KeyEvent.ACTION_DOWN, 0, 0);
+        ui(() -> BaseInputConnection.setComposingSpans(entry.getText()));
+        centerEvent(press, KeyEvent.ACTION_UP, 0, 0);
+        assertEquals(0, clicks);
+    }
+
+    public void testEditorCanceledCenterDoesNotSend() {
+        sendFromEditor();
+        long press = SystemClock.uptimeMillis();
+        centerEvent(press, KeyEvent.ACTION_DOWN, 0, 0);
+        centerEvent(press, KeyEvent.ACTION_UP, 0, KeyEvent.FLAG_CANCELED);
+        assertEquals(0, clicks);
+    }
+
+    public void testEditorCenterCannotReuseAnEarlierDownEvent() {
+        sendFromEditor();
+        long press = SystemClock.uptimeMillis();
+        centerEvent(press, KeyEvent.ACTION_DOWN, 0, 0);
+        // The IME consumed that release, and the down of this new press.
+        centerEvent(press + 1, KeyEvent.ACTION_UP, 0, 0);
+        assertEquals(0, clicks);
+    }
+
+    public void testEditorCenterLosingFocusDoesNotSend() {
+        sendFromEditor();
+        long press = SystemClock.uptimeMillis();
+        centerEvent(press, KeyEvent.ACTION_DOWN, 0, 0);
+        ui(() -> { send.requestFocus(); entry.requestFocus(); });
+        centerEvent(press, KeyEvent.ACTION_UP, 0, 0);
+        assertEquals(0, clicks);
     }
 
     public void testFirstTouchAfterKeyboardActivatesSend() {

@@ -18,7 +18,11 @@ package com.android.messaging.ui;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.view.KeyEvent;
+import android.view.inputmethod.BaseInputConnection;
+import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 
 /**
@@ -29,14 +33,64 @@ import android.widget.EditText;
  */
 public class PlainTextEditText extends EditText {
     private static final char OBJECT_UNICODE = '\uFFFC';
+    private long mCenterDownTime = -1;
 
     public PlainTextEditText(final Context context, final AttributeSet attrs) {
         super(context, attrs);
     }
 
     @Override
-    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // These callbacks run AFTER the IME. TT9 gets first refusal for accepting
+        // dictionary suggestions; do not move this handling to onKeyPreIme.
+        if (isSendKey(keyCode, event)) {
+            if (event.getRepeatCount() == 0) {
+                mCenterDownTime = hasComposingText() ? -1 : event.getDownTime();
+            }
+            return true;
+        }
         return DpadNavigation.leaveEditor(this, keyCode, event) || super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+            final boolean pressedHere = mCenterDownTime != -1
+                    && mCenterDownTime == event.getDownTime();
+            mCenterDownTime = -1;
+            if (isSendKey(keyCode, event)) {
+                // An IME may consume only the down event while committing a word.
+                // Its leftover up event must never send the newly committed text.
+                if (pressedHere && !event.isCanceled() && !hasComposingText()) {
+                    onEditorAction(EditorInfo.IME_ACTION_SEND);
+                }
+                return true;
+            }
+        }
+        return super.onKeyUp(keyCode, event);
+    }
+
+    private boolean isSendKey(int keyCode, KeyEvent event) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_CENTER && event.hasNoModifiers()
+                && isFocused() && isEnabled()
+                && (getImeOptions() & EditorInfo.IME_MASK_ACTION) == EditorInfo.IME_ACTION_SEND;
+    }
+
+    private boolean hasComposingText() {
+        return BaseInputConnection.getComposingSpanStart(getText()) >= 0
+                || BaseInputConnection.getComposingSpanEnd(getText()) >= 0;
+    }
+
+    @Override
+    protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
+        mCenterDownTime = -1;
+        super.onFocusChanged(focused, direction, previouslyFocusedRect);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        if (!hasWindowFocus) mCenterDownTime = -1;
+        super.onWindowFocusChanged(hasWindowFocus);
     }
 
     // Intercept and modify the paste event. Let everything else through unchanged.
