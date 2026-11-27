@@ -12,11 +12,17 @@ object ChatStorage {
     @JvmStatic fun decodeConversation(value: String): Conversation = Wire.conversation(JSONObject(value))
     @JvmStatic fun encodeMessage(value: Message): String = Wire.message(value).toString()
     @JvmStatic fun decodeMessage(value: String): Message = Wire.message(JSONObject(value))
+    @JvmStatic fun encodePreparedHistory(value: PreparedHistory): String = Wire.history(value).toString()
+    @JvmStatic fun decodePreparedHistory(value: String): PreparedHistory = Wire.history(JSONObject(value))
 }
 internal fun JSONObject.nullableString(key: String): String? = if(isNull(key)) null else getString(key)
 internal fun JSONObject.nullableLong(key: String): Long? = if(isNull(key)) null else getLong(key)
 internal fun <T> JSONArray.objects(decode: (JSONObject) -> T): List<T> = (0 until length()).map { decode(getJSONObject(it)) }
 internal object Wire {
+    fun verification(v: JSONObject): PairingVerification {
+        val numbers = v.getJSONArray("numbers")
+        return PairingVerification(v.nullableString("id"), v.getString("state"), (0 until numbers.length()).map(numbers::getInt), v.getLong("expires_at"))
+    }
     inline fun <reified T : Enum<T>> enum(value: String, fallback: T? = null): T = enumValues<T>().firstOrNull { it.name.lowercase(Locale.ROOT) == value }
         ?: fallback ?: throw ChatException("Unsupported value from messaging core")
     fun Enum<*>.wire() = name.lowercase(Locale.ROOT)
@@ -24,7 +30,11 @@ internal object Wire {
     fun session(v: Session) = JSONObject().put("credentials", v.credentials).put("account_id", v.accountId).put("device_id", v.deviceId).put("phone", v.phone)
     fun contact(v: JSONObject) = Contact(v.getString("id"), v.nullableString("phone"))
     fun contact(v: Contact) = JSONObject().put("id", v.id).put("phone", v.phone)
-    fun pairing(v: JSONObject) = PairingReview(v.getString("description"), v.getLong("expires_at"), v.getBoolean("approved"))
+    fun pairing(v: JSONObject) = PairingReview(v.getString("description"), v.getLong("expires_at"), v.getBoolean("approved"), v.nullableString("pairing_id"), v.nullableString("history_public_key"))
+    fun pairing(v: PairingReview) = JSONObject().put("description", v.description).put("expires_at", v.expiresAt)
+        .put("approved", v.approved).put("pairing_id", v.pairingId).put("history_public_key", v.historyPublicKey)
+    fun history(v: JSONObject) = PreparedHistory(v.getString("pairing_id"), v.getString("envelope"))
+    fun history(v: PreparedHistory) = JSONObject().put("pairing_id", v.pairingId).put("envelope", v.envelope)
     fun recipient(v: JSONObject) = RecipientStatus(enum(v.getString("availability"), Availability.UNKNOWN), v.optJSONObject("contact")?.let(::contact), v.getLong("retry_at_ms"))
     fun conversation(v: JSONObject) = Conversation(v.getString("id"), enum(v.getString("kind"), ConversationKind.UNKNOWN), v.nullableString("name"),
         v.getJSONArray("members").objects { GroupMember(contact(it.getJSONObject("contact")), enum(it.getString("membership"), Membership.UNKNOWN), it.getBoolean("admin")) },

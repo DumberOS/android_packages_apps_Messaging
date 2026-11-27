@@ -119,4 +119,52 @@ public class ChatStorageTest extends AndroidTestCase {
             assertEquals(ErrorKind.INVALID_INPUT, expected.getKind());
         }
     }
+    public void testBrowserSnapshotSurvivesReopenAndUsesSmallEncryptedRows() {
+        Session session = new Session("credential", "account", "device", "+46123456789");
+        ChatAccount account = new ChatAccount(session, "+46123456789", 3, 42, null, "SIM",
+                "crypto", "password", 123L, AccountStatus.CONNECTED);
+        store.save(account);
+        // Larger than Android's usual CursorWindow: a single BLOB cannot be read back.
+        String envelope = String.join("", Collections.nCopies(3 * 1024 * 1024, "x"));
+        PreparedHistory prepared = new PreparedHistory("pair", envelope);
+        BrowserHistoryTransfer transfer = new BrowserHistoryTransfer(account.getId(),
+                ChatHistoryTransfer.INSTANCE.sessionKey(account), "12345678", 1000L, 10000L,
+                prepared, true, false, 0L, "");
+        store.save(transfer);
+        store.close();
+        assertEquals(transfer, store.browserHistory(true).get(0));
+        assertNull(store.browserHistory().get(0).getPrepared());
+        try (android.database.Cursor c = store.getReadableDatabase().rawQuery(
+                "SELECT length(payload) FROM records WHERE kind='browser_history_chunk'", null)) {
+            int chunks = 0;
+            while (c.moveToNext()) { assertTrue(c.getLong(0) < 128 * 1024); chunks++; }
+            assertTrue(chunks > 1);
+        }
+        store.save(new ChatAccount(new Session("replacement", "account", "device2", null),
+                "+46123456789", 3, 42, null, "SIM", "crypto2", "password2", 456L, AccountStatus.CONNECTED));
+        assertTrue(store.browserHistory(true).isEmpty());
+        try (android.database.Cursor c = store.getReadableDatabase().rawQuery(
+                "SELECT count(*) FROM records WHERE kind='browser_history_chunk'", null)) {
+            assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0));
+        }
+    }
+    public void testSmsClaimSurvivesRestartConcurrentReplayAndRegistrationReplacement() throws Exception {
+        Session session = new Session("sms-credential", "sms-account", "sms-device", "+46123456789");
+        ChatAccount account = new ChatAccount(session, "+46123456789", 3, 42, null, "SIM", "sms-crypto", "password", 123L, AccountStatus.CONNECTED);
+        store.save(account); store.enableSms(account);
+        SmsRequest request = new SmsRequest("event", "12345678-1234-1234-1234-123456789012", "send", "+46987654321", "test", 1000L, 1000L);
+        SmsAttempt attempt = new SmsAttempt(account.getId(), ChatHistoryTransfer.INSTANCE.sessionKey(account), request, "unknown", "", Collections.emptyList());
+        java.util.concurrent.atomic.AtomicInteger claims = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.List<Thread> workers = new java.util.ArrayList<>();
+        for (int i=0; i<12; i++) { Thread worker = new Thread(() -> { if (store.claimSms(attempt)) claims.incrementAndGet(); }); workers.add(worker); worker.start(); }
+        for (Thread worker : workers) worker.join();
+        assertEquals(1, claims.get());
+        store.close(); // Reopen the actual SQLite database, as after process death.
+        assertFalse(store.claimSms(attempt));
+        assertEquals("unknown", store.smsAttempts().get(0).getState());
+        store.save(new ChatAccount(new Session("replacement", "sms-account", "new-device", null), "+46123456789", 3, 42, null, "SIM", "new-crypto", "password", 456L, AccountStatus.CONNECTED));
+        assertFalse(store.claimSms(attempt));
+        assertEquals(1, store.smsAttempts().size());
+    }
+
 }

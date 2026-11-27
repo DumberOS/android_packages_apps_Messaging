@@ -17,6 +17,8 @@ class ChatException(message: String, val kind: ErrorKind = ErrorKind.INTERNAL, v
 enum class Membership { JOINED, INVITED, LEFT, BANNED, REQUESTED, UNKNOWN }
 enum class ConversationKind { DIRECT, GROUP, UNKNOWN }
 enum class Availability { AVAILABLE, UNAVAILABLE, UNKNOWN }
+enum class VerificationAction { POLL, CONFIRM, MISMATCH, CANCEL }
+data class PairingVerification(val id: String?, val state: String, val numbers: List<Int>, val expiresAt: Long)
 enum class SessionRole { MAIN, SECONDARY }
 data class Contact(val id: String, val phone: String? = null)
 data class GroupCapabilities(val manage: Boolean = false, val send: Boolean = false)
@@ -37,12 +39,17 @@ sealed class MessageContent {
 }
 data class Message(val eventId: String, val sender: Contact, val timestampMs: Long, val content: MessageContent, val encrypted: Boolean, val transactionId: String? = null)
 data class ConversationUpdate(val conversation: Conversation, val messages: List<Message>, val limited: Boolean = false)
-data class SyncUpdate(val conversations: List<ConversationUpdate>, val contactsPending: Boolean = false, val calls: List<CallEvent> = emptyList())
+data class SyncUpdate(val conversations: List<ConversationUpdate>, val contactsPending: Boolean = false, val calls: List<CallEvent> = emptyList(), val smsRequests: List<SmsRequest> = emptyList())
 data class SentMessage(val eventId: String, val encrypted: Boolean)
 data class RecipientStatus(val availability: Availability, val contact: Contact? = null, val retryAtMs: Long = 0)
 data class CodeRequest(val status: String, val development: Boolean)
 data class SessionStatus(val role: SessionRole, val mainActive: Boolean)
-data class PairingReview(val description: String, val expiresAt: Long, val approved: Boolean)
+data class PairingReview(val description: String, val expiresAt: Long, val approved: Boolean,
+    val pairingId: String? = null, val historyPublicKey: String? = null)
+data class HistoryConversation(val conversation: Conversation, val messages: List<Message>)
+data class PreparedHistory(val pairingId: String, val envelope: String) {
+    override fun toString() = "PreparedHistory(pairingId=$pairingId)"
+}
 data class Device(val deviceId: String, val name: String?, val verified: Boolean, val fingerprint: String?)
 data class DeviceList(val contact: Contact, val currentDeviceId: String, val currentDeviceFingerprint: String?, val devices: List<Device>)
 data class KeyImport(val importedCount: Long, val totalCount: Long)
@@ -56,3 +63,12 @@ data class CallEvent(val eventId: String, val conversationId: String, val sender
 class TurnConfig(val uris: List<String>, val username: String, val password: String, val ttl: Long) {
     override fun toString() = "TurnConfig(redacted)"
 }
+
+/** Commands are bound to the current device channel; hosts must durably claim before sending. */
+data class SmsRequest @JvmOverloads constructor(val eventId: String, val requestId: String, val kind: String, val address: String, val body: String, val createdAtMs: Long, val receivedAtMs: Long, val simId: String = "", val transport: String = "")
+data class SmsMessage @JvmOverloads constructor(val id: String, val address: String, val body: String, val timestampMs: Long, val incoming: Boolean, val status: String, val name: String = "", val deleted: Boolean = false, val simId: String = "", val transport: String = "sms", val matrixEventId: String = "", val matrixRoomId: String = "", val matrixAccount: String = "")
+
+data class SmsSim(val id: String, val label: String, val phone: String, val accountId: String)
+data class SmsRecipient(val simId: String, val address: String, val transport: String)
+
+data class SmsProgress(val generation: Long, val requestIds: List<String>, val offset: Long, val total: Long, val complete: Boolean)

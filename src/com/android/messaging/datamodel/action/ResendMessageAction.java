@@ -64,9 +64,12 @@ public class ResendMessageAction extends Action implements Parcelable {
 
         final DatabaseWrapper db = DataModel.get().getDatabase();
 
+        // Repair only legacy direct-send rows whose callback confirmed success.
+        com.android.messaging.dumber.ChatHost.reconcileSmsStatuses();
         final MessageData message = BugleDatabaseOperations.readMessage(db, messageId);
         // Check message can be resent
         if (message != null && message.canResendMessage()) {
+            com.android.messaging.dumber.BrowserSmsQueue.manualRetry(message);
             final boolean isMms = message.getIsMms();
             long timestamp = System.currentTimeMillis();
             if (isMms) {

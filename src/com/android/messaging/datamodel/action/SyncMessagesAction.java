@@ -439,6 +439,7 @@ public class SyncMessagesAction extends Action implements Parcelable {
                         MessagingContentProvider.notifyPartsChanged();
                     }
                 }
+                com.android.messaging.dumber.ChatHost.reconcileSmsStatuses();
                 // Determine if there are more messages that need to be scanned
                 if (lastTimestampMillis >= 0 && lastTimestampMillis >= lowerBoundTimeMillis) {
                     if (LogUtil.isLoggable(TAG, LogUtil.DEBUG)) {

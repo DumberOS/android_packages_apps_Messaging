@@ -11,6 +11,14 @@ interface ChatApi {
     fun sessionStatus(): SessionStatus
     fun reviewPairing(code: String): PairingReview
     fun approvePairing(code: String): PairingReview
+    fun startPairingVerification(code: String): PairingVerification = throw ChatException("Browser verification unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun pairingVerification(id: String, action: VerificationAction = VerificationAction.POLL): PairingVerification = throw ChatException("Browser verification unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun preparePairingHistory(review: PairingReview, conversations: List<HistoryConversation>): PreparedHistory =
+        throw ChatException("History transfer unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun preparePairingHistory(review: PairingReview, conversations: List<HistoryConversation>, contactNames: Map<String, String>): PreparedHistory =
+        if (contactNames.isEmpty()) preparePairingHistory(review, conversations)
+        else throw ChatException("Contact name transfer unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun uploadPairingHistory(history: PreparedHistory) { throw ChatException("History transfer unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun recipientStatus(phone: String): RecipientStatus
     fun checkRecipient(phone: String, force: Boolean = false): RecipientStatus
     fun openChat(phone: String, cachedOnly: Boolean = false): Conversation
@@ -29,6 +37,12 @@ interface ChatApi {
     fun turnConfig(): TurnConfig = throw ChatException("Calling unsupported", ErrorKind.UPGRADE_REQUIRED)
     fun sendCall(conversationId: String, signal: CallSignal, transactionId: String) { throw ChatException("Calling unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun acknowledgeCalls(eventIds: List<String>) { throw ChatException("Calling unsupported", ErrorKind.UPGRADE_REQUIRED) }
+    fun enableSmsSync() { throw ChatException("SMS sync unsupported", ErrorKind.UPGRADE_REQUIRED) }
+    fun publishSms(messages: List<SmsMessage>, transactionId: String) { throw ChatException("SMS sync unsupported", ErrorKind.UPGRADE_REQUIRED) }
+    fun publishSms(messages: List<SmsMessage>, progress: SmsProgress, transactionId: String) { throw ChatException("History progress unsupported", ErrorKind.UPGRADE_REQUIRED) }
+    fun smsRecipientRoutes(): List<SmsRecipient> = throw ChatException("SIM sync unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun publishSmsRoutes(sims: List<SmsSim>, recipients: List<SmsRecipient>, transactionId: String) { throw ChatException("SIM sync unsupported", ErrorKind.UPGRADE_REQUIRED) }
+    fun acknowledgeSms(eventIds: List<String>) { throw ChatException("SMS sync unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun sync(): SyncUpdate
     fun devices(phone: String? = null): DeviceList
     fun exportKeys(path: String, passphrase: String)

@@ -7,9 +7,14 @@ rom_dir="$(cd "$app_dir/../../.." && pwd)"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 "$KOTLINC" "$app_dir"/prebuilts/dumber-chat/kotlin/src/main/kotlin/chat/dumber/sdk/{Models,ChatApi}.kt \
-    "$app_dir"/src/com/android/messaging/dumber/{ChatModels,ChatDelivery,ChatActivation,ChatGroupActions,ChatSessionAlerts}.kt \
-    "$app_dir/tests/dumber-chat/DeliveryTest.kt" "$app_dir/tests/dumber-chat/ActivationTest.kt" "$app_dir/tests/dumber-chat/GroupTest.kt" "$app_dir/tests/dumber-chat/SessionAlertTest.kt" -d "$test_dir/tests.jar"
+    "$app_dir"/src/com/android/messaging/dumber/{ChatModels,ChatDelivery,ChatActivation,ChatGroupActions,ChatSessionAlerts,ChatHistoryTransfer,ChatSmsPolicy,ChatRecordCache,ChatSmsRefresh}.kt \
+    "$app_dir/tests/dumber-chat/DeliveryTest.kt" "$app_dir/tests/dumber-chat/ActivationTest.kt" "$app_dir/tests/dumber-chat/GroupTest.kt" "$app_dir/tests/dumber-chat/SessionAlertTest.kt" "$app_dir/tests/dumber-chat/HistoryTest.kt" "$app_dir/tests/dumber-chat/SmsTest.kt" "$app_dir/tests/dumber-chat/SyncLatencyTest.kt" -d "$test_dir/tests.jar"
 "$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.DeliveryTestKt
 "$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.ActivationTestKt
 "$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.GroupTestKt
 "$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.SessionAlertTestKt
+"$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.HistoryTestKt
+
+"$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.SmsTestKt
+
+"$KOTLIN" -classpath "$test_dir/tests.jar" com.android.messaging.dumber.SyncLatencyTestKt

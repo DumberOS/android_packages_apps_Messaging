@@ -30,6 +30,13 @@ class ChatClient internal constructor(private val config: ChatConfig, private va
     override fun sessionStatus() = obj("session_status").let { SessionStatus(Wire.enum(it.getString("role")), it.getBoolean("main_active")) }
     override fun reviewPairing(code: String) = Wire.pairing(obj("pairing_review", "code" to code))
     override fun approvePairing(code: String) = Wire.pairing(obj("pairing_approve", "code" to code))
+    override fun startPairingVerification(code: String) = Wire.verification(obj("start_pairing_verification", "code" to code))
+    override fun pairingVerification(id: String, action: VerificationAction) = Wire.verification(obj("pairing_verification", "id" to id, "action" to action.name.lowercase(java.util.Locale.ROOT)))
+    override fun preparePairingHistory(review: PairingReview, conversations: List<HistoryConversation>) = preparePairingHistory(review, conversations, emptyMap())
+    override fun preparePairingHistory(review: PairingReview, conversations: List<HistoryConversation>, contactNames: Map<String, String>) = Wire.history(obj("prepare_pairing_history",
+        "review" to Wire.pairing(review), "contact_names" to JSONObject(contactNames), "conversations" to conversations.map { JSONObject().put("conversation", Wire.conversation(it.conversation))
+            .put("messages", JSONArray(it.messages.map(Wire::message))) }))
+    override fun uploadPairingHistory(history: PreparedHistory) { call("upload_pairing_history", "history" to Wire.history(history)) }
     override fun recipientStatus(phone: String) = Wire.recipient(obj("recipient_status", "phone" to phone))
     override fun checkRecipient(phone: String, force: Boolean) = Wire.recipient(obj("check_recipient", "phone" to phone, "force" to force))
     override fun openChat(phone: String, cachedOnly: Boolean) = Wire.conversation(obj("open_chat", "phone" to phone, "cached_only" to cachedOnly))
@@ -48,9 +55,23 @@ class ChatClient internal constructor(private val config: ChatConfig, private va
     override fun turnConfig() = obj("turn_config").let { v -> TurnConfig(v.getJSONArray("uris").let { a -> (0 until a.length()).map { a.getString(it) } }, v.getString("username"), v.getString("password"), v.getLong("ttl")) }
     override fun sendCall(conversationId: String, signal: CallSignal, transactionId: String) { call("send_call", "conversation_id" to conversationId, "signal" to CallWire.encode(signal), "transaction_id" to transactionId) }
     override fun acknowledgeCalls(eventIds: List<String>) { call("acknowledge_calls", "event_ids" to eventIds) }
+    override fun enableSmsSync() { call("enable_sms_sync") }
+    override fun publishSms(messages: List<SmsMessage>, transactionId: String) = publishSmsBatch(messages, null, transactionId)
+    override fun publishSms(messages: List<SmsMessage>, progress: SmsProgress, transactionId: String) = publishSmsBatch(messages, progress, transactionId)
+    private fun publishSmsBatch(messages: List<SmsMessage>, progress: SmsProgress?, transactionId: String) { call("publish_sms", "transaction_id" to transactionId,
+        "progress" to progress?.let { JSONObject().put("generation",it.generation).put("request_ids",JSONArray(it.requestIds)).put("offset",it.offset).put("total",it.total).put("complete",it.complete) }, "messages" to messages.map { v -> JSONObject()
+        .put("id",v.id).put("address",v.address).put("body",v.body).put("timestamp_ms",v.timestampMs).put("incoming",v.incoming).put("status",v.status).put("name",v.name).put("deleted",v.deleted).put("sim_id",v.simId).put("transport",v.transport).put("matrix_event_id",v.matrixEventId).put("matrix_room_id",v.matrixRoomId).put("matrix_account",v.matrixAccount) }) }
+    override fun smsRecipientRoutes() = (call("sms_recipient_routes") as JSONArray).objects { v -> SmsRecipient(v.getString("sim_id"),v.getString("address"),v.getString("transport")) }
+    override fun publishSmsRoutes(sims: List<SmsSim>, recipients: List<SmsRecipient>, transactionId: String) {
+        call("publish_sms_routes", "transaction_id" to transactionId,
+            "sims" to sims.map { v -> JSONObject().put("id",v.id).put("label",v.label).put("phone",v.phone).put("account_id",v.accountId) },
+            "recipients" to recipients.map { v -> JSONObject().put("sim_id",v.simId).put("address",v.address).put("transport",v.transport) })
+    }
+    override fun acknowledgeSms(eventIds: List<String>) { call("acknowledge_sms", "event_ids" to eventIds) }
     override fun sync() = obj("sync").let { SyncUpdate(it.getJSONArray("conversations").objects { update ->
         ConversationUpdate(Wire.conversation(update.getJSONObject("conversation")), update.getJSONArray("messages").objects(Wire::message), update.getBoolean("limited"))
-    }, it.getBoolean("contacts_pending"), it.optJSONArray("calls")?.objects(CallWire::event) ?: emptyList()) }
+    }, it.getBoolean("contacts_pending"), it.optJSONArray("calls")?.objects(CallWire::event) ?: emptyList(), it.optJSONArray("sms_requests")?.objects { v ->
+        SmsRequest(v.getString("event_id"),v.getString("request_id"),v.getString("kind"),v.getString("address"),v.getString("body"),v.getLong("created_at_ms"),v.getLong("received_at_ms"),v.optString("sim_id"),v.optString("transport")) } ?: emptyList()) }
     override fun devices(phone: String?) = obj("devices", "phone" to phone).let { data -> DeviceList(Wire.contact(data.getJSONObject("contact")), data.getString("current_device_id"), data.nullableString("current_device_fingerprint"), data.getJSONArray("devices").objects {
         Device(it.getString("device_id"), it.nullableString("name"), it.getBoolean("verified"), it.nullableString("fingerprint"))
     }) }

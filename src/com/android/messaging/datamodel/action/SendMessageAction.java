@@ -100,6 +100,11 @@ public class SendMessageAction extends Action implements Parcelable {
         final MessageData message = BugleDatabaseOperations.readMessage(db, messageId);
         // Check message can be resent
         if (message != null && message.canSendMessage()) {
+            if (!com.android.messaging.dumber.BrowserSmsQueue.allow(Factory.get().getApplicationContext(),message,false)) {
+                message.markMessageFailed(System.currentTimeMillis());
+                updateMessageAndStatus(message.getIsSms(),message,null,false);
+                return false;
+            }
             final boolean isSms = message.getIsSms();
             long timestamp = System.currentTimeMillis();
             if (!isSms) {
@@ -136,6 +141,7 @@ public class SendMessageAction extends Action implements Parcelable {
             // Update action state with parameters needed for background sending
             actionParameters.putParcelable(KEY_MESSAGE_URI, messageUri);
             actionParameters.putParcelable(KEY_MESSAGE, message);
+            actionParameters.putString("browser_sms_key",com.android.messaging.dumber.BrowserSmsQueue.requestKey(message));
             actionParameters.putStringArrayList(KEY_RECIPIENTS, recipients);
             actionParameters.putInt(KEY_SUB_ID, self.getSubId());
             actionParameters.putString(KEY_SUB_PHONE_NUMBER, self.getNormalizedDestination());
@@ -211,8 +217,10 @@ public class SendMessageAction extends Action implements Parcelable {
             final String smsServiceCenter = actionParameters.getString(KEY_SMS_SERVICE_CENTER);
             final boolean deliveryReportRequired = MmsUtils.isDeliveryReportRequired(subId);
 
-            status = MmsUtils.sendSmsMessage(recipient, messageText, messageUri, subId,
-                    smsServiceCenter, deliveryReportRequired);
+            status = com.android.messaging.dumber.BrowserSmsQueue.allow(Factory.get().getApplicationContext(),message,true,actionParameters.getString("browser_sms_key"))
+                    ? MmsUtils.sendSmsMessage(recipient, messageText, messageUri, subId,
+                            smsServiceCenter, deliveryReportRequired)
+                    : MmsUtils.MMS_REQUEST_MANUAL_RETRY;
         } else {
             final Context context = Factory.get().getApplicationContext();
             final ArrayList<String> recipients =

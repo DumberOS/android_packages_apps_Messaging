@@ -798,12 +798,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // during participant refresh.
         db.execSQL(getCreateSelfParticipantSql(ParticipantData.DEFAULT_SELF_SUB_ID));
 
+        com.android.messaging.dumber.BrowserSmsQueue.install(db);
         DataModel.get().onCreateTables(db);
     }
 
     @Override
     public void onCreate(SQLiteDatabase db) {
         createDatabase(db);
+    }
+
+    @Override
+    public void onConfigure(SQLiteDatabase db) {
+        super.onConfigure(db);
+        // The browser handoff commit must be durable before the carrier boundary.
+        db.execSQL("PRAGMA synchronous=FULL");
+    }
+
+    @Override
+    public void onOpen(SQLiteDatabase db) {
+        super.onOpen(db);
+        com.android.messaging.dumber.BrowserSmsQueue.install(db);
     }
 
     @Override

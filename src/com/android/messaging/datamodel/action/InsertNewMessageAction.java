@@ -95,6 +95,14 @@ public class InsertNewMessageAction extends Action implements Parcelable {
         actionParameters.putParcelable(KEY_MESSAGE, message);
     }
 
+    /** Browser requests use the same queue while retaining their replay identity. */
+    public static void insertBrowserSms(final String key, final int subId,
+            final String recipient, final String text) {
+        final InsertNewMessageAction action = new InsertNewMessageAction(subId, recipient, text, null);
+        action.actionParameters.putString("browser_sms_key",key);
+        action.start();
+    }
+
     /** Explicitly confirmed carrier fallback; token prevents normal send interception. */
     public static void insertCarrierMessage(final String id, final int subId,
             final String recipient, final String text) {
@@ -130,6 +138,11 @@ public class InsertNewMessageAction extends Action implements Parcelable {
             return executeMessage();
         } catch (RuntimeException error) {
             final Context context = Factory.get().getApplicationContext();
+            final String browser = actionParameters.getString("browser_sms_key");
+            if (browser != null) {
+                com.android.messaging.dumber.ChatSmsSync.queueFailed(context,browser);
+                return null;
+            }
             final String id = actionParameters.getString("dumber_carrier_id");
             if (id == null) throw error;
             com.android.messaging.dumber.DumberChat.carrierFailed(context, id,
@@ -142,6 +155,11 @@ public class InsertNewMessageAction extends Action implements Parcelable {
         final String carrierId = actionParameters.getString("dumber_carrier_id");
         final Context app = Factory.get().getApplicationContext();
         if (carrierId != null && !com.android.messaging.dumber.DumberChat.carrierPending(app, carrierId)) return null;
+        final String browser = actionParameters.getString("browser_sms_key");
+        if (browser != null && com.android.messaging.dumber.BrowserSmsQueue.replay(app,browser)) {
+            ProcessPendingMessagesAction.scheduleProcessPendingMessagesAction(false,this);
+            return null;
+        }
         MessageData message = actionParameters.getParcelable(KEY_MESSAGE);
         if (message == null) {
             LogUtil.i(TAG, "InsertNewMessageAction: Creating MessageData with provided data");
@@ -179,7 +197,7 @@ public class InsertNewMessageAction extends Action implements Parcelable {
 
         // TODO: Work out whether to send with SMS or MMS (taking into account recipients)?
         final boolean isSms = (message.getProtocol() == MessageData.PROTOCOL_SMS);
-        if (carrierId == null && recipients.size() == 1) {
+        if (carrierId == null && browser == null && recipients.size() == 1) {
             final boolean encrypted;
             try {
                 encrypted = com.android.messaging.dumber.DumberChat.intercept(app, recipients.get(0),
@@ -227,7 +245,7 @@ public class InsertNewMessageAction extends Action implements Parcelable {
             }
 
             // Can now clear draft from conversation (deleting attachments if necessary)
-            BugleDatabaseOperations.updateDraftMessageData(db, conversationId,
+            if (browser == null) BugleDatabaseOperations.updateDraftMessageData(db, conversationId,
                     null /* message */, BugleDatabaseOperations.UPDATE_MODE_CLEAR_DRAFT);
         } else {
             final long timestampRoundedToSecond = 1000 * ((timestamp + 500) / 1000);
@@ -430,7 +448,10 @@ public class InsertNewMessageAction extends Action implements Parcelable {
 
         // Insert message into telephony database sms message table
         final String carrierId = actionParameters.getString("dumber_carrier_id");
-        final Uri messageUri = carrierId != null
+        final String browser = actionParameters.getString("browser_sms_key");
+        final Uri messageUri = browser != null
+                ? com.android.messaging.dumber.ChatSmsSync.queueUri(context,browser,threadId,timestamp)
+                : carrierId != null
                 ? com.android.messaging.dumber.DumberChat.carrierUri(context, carrierId, threadId, timestamp)
                 : MmsUtils.insertSmsMessage(context,
                 Telephony.Sms.CONTENT_URI,
@@ -449,11 +470,17 @@ public class InsertNewMessageAction extends Action implements Parcelable {
         if (messageUri != null && !TextUtils.isEmpty(messageUri.toString())) {
             db.beginTransaction();
             try {
-                message = MessageData.createDraftSmsMessage(conversationId,
-                        content.getSelfId(), messageText);
-                message.updateSendingMessage(conversationId, messageUri, timestamp);
-
-                BugleDatabaseOperations.insertNewMessageInTransaction(db, message);
+                // Provider sync may have imported the marker after a crash. Adopt it once.
+                message = browser == null ? null : BugleDatabaseOperations.readMessageData(db,messageUri);
+                if (message == null) {
+                    message = MessageData.createDraftSmsMessage(conversationId,content.getSelfId(),messageText);
+                    message.updateSendingMessage(conversationId,messageUri,timestamp);
+                    BugleDatabaseOperations.insertNewMessageInTransaction(db,message);
+                } else {
+                    message.updateSendingMessage(conversationId,messageUri,message.getReceivedTimeStamp());
+                    BugleDatabaseOperations.updateMessageInTransaction(db,message);
+                }
+                if (browser != null) com.android.messaging.dumber.BrowserSmsQueue.bind(db,browser,message);
 
                 // Do not update the conversation summary to reflect autogenerated 1:1 messages
                 if (sendingConversationId != null) {
@@ -471,6 +498,7 @@ public class InsertNewMessageAction extends Action implements Parcelable {
                         + message.getMessageId() + " (uri = " + message.getSmsMessageUri()
                         + ", timestamp = " + message.getReceivedTimeStamp() + ")");
             }
+            if (browser != null) com.android.messaging.dumber.ChatSmsSync.linked(context,browser,message.getMessageId(),messageUri.toString());
             MessagingContentProvider.notifyMessagesChanged(conversationId);
             MessagingContentProvider.notifyPartsChanged();
         } else {

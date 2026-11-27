@@ -16,6 +16,27 @@ Encrypted direct messages appear in ordinary threads with an **Encrypted** label
 
 ## Code boundaries
 
+### Browser history and contact names
+
+**Link a browser** copies saved encrypted direct and group text after confirmation.
+Direct history comes from surviving provider rows carrying the selected account's
+`dumber.chat:` marker; ordinary SMS/MMS, queued sends, other accounts and deleted
+rows are excluded. Group history comes from the existing private store, including
+left groups but excluding deleted groups. Phone contacts are looked up locally
+only for participants in the exported conversations. Available names accompany
+the encrypted snapshot and appear in browser chat titles and sender labels.
+
+The shared SDK translates its opaque IDs into browser transport identities and
+encrypts the snapshot. Hosts retain their typed API boundary. Pending work is
+bound to the exact registration and persisted before approval; approval is saved
+before upload. The existing receive loop retries uploads independently of normal
+messaging. Account replacement/logout removes pending transfers. Settings show
+copy status, retry and stop actions; export errors do not prevent browser linking.
+Snapshots have an 8 MiB limit and expire on the server 15 minutes after approval.
+Encrypted upload records are split into small SQLite rows to avoid CursorWindow
+limits; no plaintext export file or new background service is introduced.
+
+
 - `prebuilts/dumber-chat`: precompiled ARM64/ARM32 Rust JNI libraries, matching `chat.dumber.sdk` Kotlin bindings, checksums, provenance and third-party notices. Refresh this entire bundle together. Rust source stays in the separate dumber.chat repository, not this app tree.
 - `src/com/android/messaging/dumber`: typed Android account, SIM, queue, encrypted group storage, services and UI. This code does not construct JSON or know Matrix commands.
 - `ChatHost.java` and the small Bugle hooks: carrier sending, provider synchronization, notifications, settings and conversation-list integration.
@@ -75,3 +96,44 @@ existing Binder call service; it never registers separately. A standalone client
 registering either role logs this combined client out completely. Deploy the
 matching server update before registering with this build. Existing sessions
 remain valid during the migration.
+
+## Browser SMS uses the local send queue
+
+New browser carrier requests are claimed in the encrypted request ledger, then enter
+`InsertNewMessageAction` and the normal Messaging send/result pipeline. They start
+pending/sending, not failed. The original SIM and SMS route are retained; browser
+insertion does not clear the phone's draft or invoke encrypted-send interception.
+A stable provider marker recovers insertion interrupted before the local commit.
+The local message and its request mapping commit together with full SQLite
+synchronization. The mapping remains after message deletion, so replay cannot
+recreate a message. The browser exports the mapped local status, never the
+optimistic SENT placeholder in the provider.
+
+Matrix request replay creates no additional message. Normal carrier retries remain
+possible, just as with phone-composed SMS. Every automatic attempt checks the
+original SIM/registration and ten-minute request deadline. Explicit phone-side
+retry uses the normal local retry window. Expiry before any attempt is reported as
+expired; expiry after attempting cannot claim the message was never sent.
+Existing direct-submit attempts are not migrated into the queue. Their late-result
+receiver and narrowly scoped confirmed-success repair remain for compatibility.
+
+`python3 tools/test-browser-sms-queue.py` runs the actual queue class on an adb
+Android device with a temporary SQLite database and fake send boundaries. It
+checks migration, atomic rollback, restart/replay, deletion/ID reuse, pending,
+retry/success status, expiry and manual retry. It does not install an APK, access
+message history or send SMS. Run `tools/test-dumber-chat.sh` for host policy tests
+and `tools/build-dumber-messaging.sh` for the production and instrumentation APKs.
+
+
+SMS latency: the foreground service observes both the SMS provider and Bugle's message
+notifications (including send status), and coalesces exports on a separate worker within
+one second. A ten-second fallback scan covers missed notifications. Matrix receive loops
+do not wait for history uploads. Publisher batches check the snapshot generation before
+committing, so a concurrent history request cannot inherit old progress or fingerprints.
+The encrypted local store keeps a bounded, process-local record cache validated against
+SQLite ciphertext; unchanged rows avoid repeated hardware-keystore decryption, while
+updates and rolled-back transactions remain visible. The on-disk format is unchanged.
+`tools/test-dumber-chat.sh` covers cache rollback/eviction and refresh notifications during
+an in-flight export. Slow export diagnostics log durations only, never message content.
+
+Browser pairing asks **Enable SMS in the linked browser?** immediately after the browser fingerprint is accepted, with the existing history/SIM sharing explanation and **Yes**/**No** choices. Both choices continue pairing; Yes enables SMS sharing if it is not already enabled for the registration. Existing sharing is preserved, and pairing another browser does not reset the export ledger. The connected-account page no longer shows a separate SMS sharing button or explanation.

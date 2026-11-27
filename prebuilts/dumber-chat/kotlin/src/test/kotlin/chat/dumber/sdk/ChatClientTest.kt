@@ -150,4 +150,30 @@ class ChatClientTest {
         assertEquals(Device("device_a",null,false,null),client.devices().devices.single())
         assertEquals(KeyImport(2,3),client.importKeys("path","passphrase"))
     }
+    @Test fun historyPreparationAndRetryEnvelopeRemainTyped() {
+        val review = PairingReview("Browser", 123, true, "a".repeat(32), "public-key")
+        val history = PreparedHistory(review.pairingId!!, "encrypted snapshot")
+        val client = ChatClient(config) {
+            val op = JSONObject(it).getJSONObject("operation")
+            when(op.getString("command")) {
+                "prepare_pairing_history" -> {
+                    assertEquals("Alice", op.getJSONObject("contact_names").getString("contact_a"))
+                    assertEquals(review.historyPublicKey, op.getJSONObject("review").getString("history_public_key"))
+                    assertEquals(group.id, op.getJSONArray("conversations").getJSONObject(0).getJSONObject("conversation").getString("id"))
+                    """{"ok":true,"data":${ChatStorage.encodePreparedHistory(history)}}"""
+                }
+                "upload_pairing_history" -> {
+                    assertEquals(history, ChatStorage.decodePreparedHistory(op.getJSONObject("history").toString()))
+                    """{"ok":true,"data":null}"""
+                }
+                else -> error("Unexpected operation")
+            }
+        }
+        val prepared = client.preparePairingHistory(review, listOf(HistoryConversation(group, emptyList())), mapOf("contact_a" to "Alice"))
+        assertEquals(history, prepared)
+        assertEquals(history, ChatStorage.decodePreparedHistory(ChatStorage.encodePreparedHistory(prepared)))
+        client.uploadPairingHistory(prepared)
+        client.uploadPairingHistory(prepared)
+        assertFalse(prepared.toString().contains("encrypted snapshot"))
+    }
 }

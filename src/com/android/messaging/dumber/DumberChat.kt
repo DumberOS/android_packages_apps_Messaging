@@ -419,6 +419,7 @@ object DumberChat {
         store.done(v)
         gateway?.refreshMessages(incoming && gateway?.blocked(phone) != true)
     }
+    internal fun refreshSms(context: Context) { gateway?.refreshMessages(false); changed(context) }
     internal fun sync(context: Context, account: ChatAccount) {
         val store = ChatStore.get(context)
         val client = ChatAccounts.client(context, account)
@@ -486,6 +487,7 @@ object DumberChat {
             }
         }
         changed(context)
+        ChatSmsSync.receive(context, account, update.smsRequests)
     }
     private fun acknowledge(context: Context, value: ReceivedText) {
         if (value.message.sender.id != value.account) return

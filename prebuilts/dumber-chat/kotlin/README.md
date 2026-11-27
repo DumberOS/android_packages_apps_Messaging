@@ -36,6 +36,41 @@ The host chooses where to store them, encrypts sensitive local data, owns histor
 and deletion rules, and keeps pending-send transaction IDs stable across retries.
 Session credentials and store passwords must never be inspected or logged.
 `Session` and `CryptoStore` redact secrets from their string representations.
+
+## History when linking a browser
+
+For new browser links, call `approvePairing(code)`, then poll
+`startPairingVerification(code)` until it returns an ID. Poll
+`pairingVerification(id)` while the normal account sync loop runs. Display the
+three `numbers` and submit `VerificationAction.CONFIRM` only after explicit user
+comparison with the browser; use `MISMATCH` or `CANCEL` otherwise. Continue to
+SMS sharing and history export only after state `verified`. The SDK binds the
+target to the approved pairing and persists Matrix device trust. An interrupted
+or expired flow requires re-linking, not automatic confirmation.
+
+After `reviewPairing` and the user's confirmation, supply the host's local records
+as `List<HistoryConversation>` to `preparePairingHistory(review, conversations)`.
+This encrypts up to 8 MiB of confirmed readable text plus conversation metadata
+for the reviewed browser; it does not export login credentials or Matrix keys.
+The overload accepting `contactNames: Map<String, String>` includes local contact
+names keyed by SDK contact ID. Only names referenced by exported conversations or
+messages are retained. Rust translates opaque conversation/contact IDs through
+the device's encrypted address book for the browser; hosts never handle Matrix IDs.
+Retain the crypto store alongside local history. An unmappable saved conversation
+fails the export explicitly while browser approval can still proceed.
+Older browsers have a null `historyPublicKey` and can still be approved normally.
+
+Persist `ChatStorage.encodePreparedHistory(prepared)` in encrypted account storage
+before sending. Approve with `approvePairing(code)`, persist the successful
+approval, then call `uploadPairingHistory(prepared)`. Retry the exact saved envelope
+on ambiguous failures; regenerating it after a successful upload causes a conflict.
+Remove pending work on account replacement/logout. Uploads expire 15 minutes after
+approval, independently of the five-minute pairing code. Export failures should
+not prevent approval. The Android sample implements this flow and foreground retries.
+
+The browser commits history to IndexedDB before acknowledging receipt; the relay
+then deletes the payload. This is a one-time copy, not a server-history API or
+ongoing synchronization between local stores.
 No Android context, SMS provider, database, lifecycle, UI, or retry scheduler is
 part of this binding. Discovery, rate limiting, identity resolution, and protocol
 interpretation remain in Rust.

@@ -542,9 +542,11 @@
         </activity>
 
         <service android:name="androidx.appcompat.mms.MmsService"/>
+        <activity android:name=".dumber.ChatPairingActivity" android:exported="false" android:label="Link browser" />
         <activity android:name=".dumber.ChatSettingsActivity" android:exported="false" android:label="dumber.chat" />
         <activity android:name=".dumber.ChatGroupActivity" android:exported="false" android:label="Encrypted group" />
         <service android:name=".dumber.ChatCallService" android:exported="true" />
+        <receiver android:name=".dumber.ChatSmsSentReceiver" android:exported="false" />
         <service android:name=".dumber.ChatSyncService" android:exported="false" android:foregroundServiceType="remoteMessaging" />
         <service android:name=".dumber.ChatLogoutJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>

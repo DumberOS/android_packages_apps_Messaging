@@ -4,6 +4,14 @@ import android.app.Service
 import android.app.job.*
 import android.content.*
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.database.ContentObserver
+import android.provider.Telephony
+import android.provider.ContactsContract
+import android.util.Log
+import com.android.messaging.datamodel.MessagingContentProvider
 import androidx.core.content.ContextCompat
 import chat.dumber.sdk.*
 import java.util.concurrent.*
@@ -13,6 +21,21 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ChatSyncService : Service() {
     private val executor = Executors.newScheduledThreadPool(3)
     private val receivers = ConcurrentHashMap<String, Future<*>>()
+    private val publishers = Executors.newScheduledThreadPool(2)
+    private val publishJobs = ConcurrentHashMap<String, ScheduledFuture<*>>()
+    private val refreshes = ConcurrentHashMap<String, ChatSmsRefresh>()
+    private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) { refreshes.values.forEach { it.changed() } }
+    }
+    override fun onCreate() {
+        super.onCreate()
+        // Bugle owns outgoing status; the system provider owns received SMS.
+        for (uri in listOf(Telephony.Sms.CONTENT_URI, MessagingContentProvider.CONVERSATION_MESSAGES_URI,
+            ContactsContract.Contacts.CONTENT_URI)) {
+            // Contacts permission may be declined; the periodic scan still runs.
+            runCatching { contentResolver.registerContentObserver(uri, true, observer) }
+        }
+    }
     private val running = AtomicBoolean(false)
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -32,8 +55,18 @@ class ChatSyncService : Service() {
                             stopSelf()
                             return@scheduleWithFixedDelay
                         }
-                        for (a in accounts) if (receivers[a.id]?.isDone != false)
-                            receivers[a.id] = executor.submit { receive(a.id) }
+                        for (id in publishJobs.keys) if (accounts.none { it.id == id }) {
+                            publishJobs.remove(id)?.cancel(true)
+                            refreshes.remove(id)
+                        }
+                        for (a in accounts) {
+                            if (receivers[a.id]?.isDone != false) receivers[a.id] = executor.submit { receive(a.id) }
+                            if (publishJobs[a.id]?.isDone != false) {
+                                val refresh = ChatSmsRefresh()
+                                refreshes[a.id] = refresh
+                                publishJobs[a.id] = publishers.scheduleWithFixedDelay({ publish(a.id, refresh) }, 0, 1, TimeUnit.SECONDS)
+                            }
+                        }
                     } catch (_: Exception) {
                         /* Temporary telephony/storage failures must not kill the timer. */
                     }
@@ -44,6 +77,23 @@ class ChatSyncService : Service() {
             )
         }
         return START_STICKY
+    }
+    private fun publish(id: String, refresh: ChatSmsRefresh) {
+        if (!running.get() || !ChatAccounts.isDefault(this)) return
+        val ticket = refresh.due(SystemClock.elapsedRealtime()) ?: return
+        try {
+            val account = ChatStore.get(this).account(id)?.takeIf { it.enabled } ?: return
+            val started = SystemClock.elapsedRealtime()
+            ChatSmsSync.publish(this, account)
+            refresh.complete(ticket, SystemClock.elapsedRealtime())
+            if (ChatStore.get(this).smsSnapshot(account)?.finished == false) refresh.changed()
+            val elapsed = SystemClock.elapsedRealtime() - started
+            if (elapsed > 5_000) Log.i("ChatSmsSync", "SMS export took ${elapsed}ms")
+        } catch (e: Exception) {
+            if (e is InterruptedException) Thread.currentThread().interrupt()
+            // No message bodies, contact details, or credentials in diagnostics.
+            Log.w("ChatSmsSync", "SMS export interrupted: ${e.javaClass.simpleName}")
+        }
     }
     private fun receive(id: String) {
         var nextStatus = 0L
@@ -59,7 +109,9 @@ class ChatSyncService : Service() {
                     ChatCalls.changed()
                     nextStatus = System.currentTimeMillis() + 60_000
                 }
+                ChatBrowserHistory.retry(this, a)
                 DumberChat.sync(this, a)
+                refreshes[id]?.changed()
                 Thread.sleep(300)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
@@ -81,6 +133,8 @@ class ChatSyncService : Service() {
     }
     override fun onDestroy() {
         running.set(false)
+        contentResolver.unregisterContentObserver(observer)
+        publishers.shutdownNow()
         executor.shutdownNow()
         ChatCalls.stop(this)
         super.onDestroy()

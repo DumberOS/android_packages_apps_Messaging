@@ -73,6 +73,7 @@ class ChatSettingsActivity : ChatActivity() {
                         store.accounts(),
                         store.verification(),
                         store.pending().filter { !it.group },
+                        store.browserHistory(),
                         ChatClient.isAvailable(),
                         checkSelfPermission(Manifest.permission.READ_PHONE_NUMBERS) ==
                             PackageManager.PERMISSION_GRANTED
@@ -396,6 +397,18 @@ class ChatSettingsActivity : ChatActivity() {
             .forEach { account ->
                 content.label("${account.simLabel} · ${account.phone} · Connected")
                 content.button("Link a browser") { pair(account.id) }
+                state.history.find { it.account == account.id }?.let { job ->
+                    content.label(when {
+                        job.finished && job.error.isNotEmpty() -> "Browser history: ${job.error}"
+                        job.finished -> "Browser linked. History sent."
+                        job.approved -> "Browser linked. Copying history… ${job.error}"
+                        else -> "Linking browser… ${job.error}"
+                    })
+                    if (!job.finished) {
+                        content.button("Retry browser copy") { operation { ChatBrowserHistory.retry(this, account, true) } }
+                        content.button("Stop browser copy") { operation { ChatBrowserHistory.cancel(this, account.id) } }
+                    }
+                }
                 content.button("Devices and fingerprints") { devices(this, account.id, null) }
                 content.button("Disconnect ${account.phone}") {
                     confirm(
@@ -448,20 +461,15 @@ class ChatSettingsActivity : ChatActivity() {
                     val a =
                         ChatStore.get(this).account(id)?.takeIf { it.enabled }
                             ?: error("Account disconnected")
-                    ChatAccounts.client(this, a).reviewPairing(code)
+                    a to ChatAccounts.client(this, a).reviewPairing(code)
                 }
-            ) { review ->
+            ) { (account, review) ->
                 confirm(
                     "Approve browser?",
-                    review.description + "\nOnly approve the browser you are linking."
+                    review.description + "\nOnly approve the browser you are linking." +
+                        if (review.historyPublicKey != null) "\nSaved encrypted chats and their contact names will be copied to this browser." else ""
                 ) {
-                    operation {
-                        val a =
-                            ChatStore.get(this).account(id)?.takeIf { it.enabled }
-                                ?: error("Account disconnected")
-                        check(review.expiresAt > System.currentTimeMillis()) { "Request expired" }
-                        ChatAccounts.client(this, a).approvePairing(code)
-                    }
+                    startActivity(android.content.Intent(this, ChatPairingActivity::class.java).putExtra("account", account.id).putExtra("code", code))
                 }
             }
         }
@@ -479,6 +487,7 @@ class ChatSettingsActivity : ChatActivity() {
         val accounts: List<ChatAccount>,
         val verification: Verification?,
         val pending: List<PendingText>,
+        val history: List<BrowserHistoryTransfer>,
         val native: Boolean,
         val canReadNumbers: Boolean
     )

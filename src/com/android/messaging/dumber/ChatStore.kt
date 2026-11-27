@@ -37,9 +37,16 @@ internal class ChatStore private constructor(context: Context) :
         db.execSQL("CREATE TABLE handled(id TEXT PRIMARY KEY NOT NULL)")
         db.execSQL("CREATE TABLE transport(uri TEXT PRIMARY KEY NOT NULL)")
     }
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        // A send-attempt commit must reach durable storage before SmsManager.
+        db.execSQL("PRAGMA synchronous=FULL")
+    }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) =
         error("Unsupported chat storage version")
-    private fun key(): SecretKey {
+    private val recordCache = ChatRecordCache()
+    private val storageKey: SecretKey by lazy { loadKey() }
+    private fun loadKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val alias = "dumber-messaging-storage"
         if (!store.containsAlias(alias))
@@ -60,46 +67,51 @@ internal class ChatStore private constructor(context: Context) :
     }
     private fun seal(bytes: ByteArray): ByteArray {
         val cipher =
-            Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
+            Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, storageKey) }
         return byteArrayOf(cipher.iv.size.toByte()) + cipher.iv + cipher.doFinal(bytes)
     }
     private fun open(bytes: ByteArray): ByteArray {
         val size = bytes[0].toInt()
         require(size in 12..16 && bytes.size > size + 1)
         return Cipher.getInstance("AES/GCM/NoPadding").run {
-            init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, size + 1)))
+            init(Cipher.DECRYPT_MODE, storageKey, GCMParameterSpec(128, bytes.copyOfRange(1, size + 1)))
             doFinal(bytes.copyOfRange(size + 1, bytes.size))
         }
     }
     @Synchronized
     private fun save(kind: String, id: String, write: DataOutputStream.() -> Unit) {
         val bytes = ByteArrayOutputStream().also { DataOutputStream(it).use(write) }.toByteArray()
+        val storedId = digest(id)
+        val encrypted = seal(bytes)
         check(
             writableDatabase.insertWithOnConflict(
                 "records",
                 null,
                 ContentValues().apply {
                     put("kind", kind)
-                    put("id", digest(id))
-                    put("payload", seal(bytes))
+                    put("id", storedId)
+                    put("payload", encrypted)
                 },
                 SQLiteDatabase.CONFLICT_REPLACE
             ) != -1L
         )
+        recordCache.remember("$kind/$storedId", encrypted, bytes)
     }
     @Synchronized
     private fun <T> records(kind: String, read: DataInputStream.() -> T): List<T> =
-        readableDatabase.rawQuery("SELECT payload FROM records WHERE kind=?", arrayOf(kind)).use { c
+        readableDatabase.rawQuery("SELECT id,payload FROM records WHERE kind=?", arrayOf(kind)).use { c
             ->
             buildList {
                 while (c.moveToNext()) add(
-                    DataInputStream(ByteArrayInputStream(open(c.getBlob(0)))).use(read)
+                    DataInputStream(ByteArrayInputStream(recordCache.read("$kind/${c.getString(0)}", c.getBlob(1), ::open))).use(read)
                 )
             }
         }
     @Synchronized
     private fun remove(kind: String, id: String) {
-        writableDatabase.delete("records", "kind=? AND id=?", arrayOf(kind, digest(id)))
+        val storedId = digest(id)
+        writableDatabase.delete("records", "kind=? AND id=?", arrayOf(kind, storedId))
+        recordCache.remove("$kind/$storedId")
     }
     @Synchronized
     fun <T> atomic(block: () -> T): T {
@@ -131,6 +143,9 @@ internal class ChatStore private constructor(context: Context) :
     @Synchronized fun account(id: String) = accounts().find { it.id == id }
     @Synchronized
     fun save(account: ChatAccount) =
+        atomic {
+        val previous = this.account(account.id)
+        if (!account.enabled || previous?.session?.credentials != account.session.credentials) clearBrowserHistory(account.id)
         save("account", account.id) {
             text(ChatStorage.encodeSession(account.session))
             text(account.phone)
@@ -143,6 +158,102 @@ internal class ChatStore private constructor(context: Context) :
             writeLong(account.connectedAt)
             text(account.status.name)
         }
+        }
+    @Synchronized fun smsEnabled(account: ChatAccount): Boolean = records("sms-enabled") { text() to text() }
+        .any { it.first == account.id && it.second == ChatHistoryTransfer.sessionKey(account) }
+    @Synchronized fun enableSms(account: ChatAccount) = save("sms-enabled", account.id) { text(account.id); text(ChatHistoryTransfer.sessionKey(account)) }
+    @Synchronized fun smsAttempts(): List<SmsAttempt> = records("sms-attempt") {
+        val old = SmsAttempt(text(), text(), SmsRequest(text(), text(), text(), text(), text(), readLong(), readLong()), text(), text(), List(readInt()) { readInt() })
+        val routed = if (available() == 0) old else old.copy(request = old.request.copy(simId = text(), transport = text()), matrixRoom = text(), matrixEvent = text(), matrixAccount = text())
+        if (available() == 0) routed else routed.copy(queueVersion = readInt(), subscription = readInt(), pinnedSim = text(), localId = text())
+    }
+    @Synchronized fun save(v: SmsAttempt) = save("sms-attempt", v.account + "/" + v.sessionKey + "/" + v.request.requestId) {
+        text(v.account);text(v.sessionKey);text(v.request.eventId);text(v.request.requestId);text(v.request.kind)
+        text(v.request.address);text(v.request.body);writeLong(v.request.createdAtMs);writeLong(v.request.receivedAtMs)
+        text(v.state);text(v.uri);writeInt(v.parts.size);v.parts.forEach { writeInt(it) }
+        text(v.request.simId);text(v.request.transport);text(v.matrixRoom);text(v.matrixEvent);text(v.matrixAccount)
+        writeInt(v.queueVersion);writeInt(v.subscription);text(v.pinnedSim);text(v.localId)
+    }
+    /** Commit the request identity before either local queueing or legacy submission. */
+    @Synchronized fun claimSms(v: SmsAttempt): Boolean = atomic {
+        val account = account(v.account)
+        if (account?.enabled != true || ChatHistoryTransfer.sessionKey(account) != v.sessionKey || !smsEnabled(account)) return@atomic false
+        val id = digest(v.account + "/" + v.sessionKey + "/" + v.request.requestId)
+        if (writableDatabase.rawQuery("SELECT 1 FROM records WHERE kind='sms-attempt' AND id=?", arrayOf(id)).use { it.moveToFirst() }) return@atomic false
+        save(v)
+        true
+    }
+    @Synchronized fun smsExports(): List<SmsExport> = records("sms-export") { SmsExport(text(), text(), text(), text(), text()) }
+    @Synchronized fun save(v: SmsExport) = save("sms-export", v.account + "/" + v.sessionKey + "/" + v.id) {
+        text(v.account);text(v.sessionKey);text(v.id);text(v.address);text(v.fingerprint)
+    }
+    @Synchronized fun smsSnapshot(account: ChatAccount) = records("sms-snapshot") {
+        SmsSnapshot(text(), text(), readLong(), List(readInt()) { text() }, readLong(), readBoolean())
+    }.find { it.account == account.id && it.sessionKey == ChatHistoryTransfer.sessionKey(account) }
+    @Synchronized fun save(v: SmsSnapshot) = save("sms-snapshot", v.account + "/" + v.sessionKey) {
+        text(v.account); text(v.sessionKey); writeLong(v.generation)
+        writeInt(v.requestIds.size); v.requestIds.forEach { text(it) }; writeLong(v.count); writeBoolean(v.finished)
+    }
+    @Synchronized fun startSmsSnapshot(account: ChatAccount, requestId: String? = null): SmsSnapshot {
+        val old = smsSnapshot(account)
+        val requests = (old?.requestIds.orEmpty() + listOfNotNull(requestId)).distinct().takeLast(32)
+        return SmsSnapshot(account.id, ChatHistoryTransfer.sessionKey(account), (old?.generation ?: 0) + 1, requests).also { save(it) }
+    }
+    @Synchronized fun smsRouteExports(account: ChatAccount) = records("sms-route") { listOf(text(), text(), text(), text()) }
+        .filter { it[0] == account.id && it[1] == ChatHistoryTransfer.sessionKey(account) }.associate { it[2] to it[3] }
+    @Synchronized fun saveSmsRoute(account: ChatAccount, id: String, fingerprint: String) =
+        save("sms-route", account.id + "/" + ChatHistoryTransfer.sessionKey(account) + "/" + id) {
+            text(account.id);text(ChatHistoryTransfer.sessionKey(account));text(id);text(fingerprint)
+        }
+    @Synchronized fun clearSmsExports(account: ChatAccount) {
+        for (id in smsRouteExports(account).keys) remove("sms-route", account.id + "/" + ChatHistoryTransfer.sessionKey(account) + "/" + id)
+        for (v in smsExports().filter { it.account == account.id && it.sessionKey == ChatHistoryTransfer.sessionKey(account) })
+            remove("sms-export", v.account + "/" + v.sessionKey + "/" + v.id)
+    }
+    private data class HistoryChunk(val account: String, val index: Int, val body: String)
+    private fun historyChunks() = records("browser_history_chunk") { HistoryChunk(text(), readInt(), text()) }
+    @Synchronized
+    @JvmOverloads
+    fun browserHistory(includePayload: Boolean = false): List<BrowserHistoryTransfer> {
+        val chunks = if (includePayload) historyChunks().groupBy { it.account } else emptyMap()
+        return records("browser_history") {
+            val account = text()
+            val sessionKey = text()
+            val code = text()
+            val codeExpiry = readLong()
+            val expiry = readLong()
+            val count = readInt()
+            val prepared = if (count == 0 || !includePayload) null else {
+                val parts = chunks[account].orEmpty().sortedBy { it.index }
+                check(parts.size == count && parts.map { it.index } == (0 until count).toList()) { "History copy storage is incomplete" }
+                ChatStorage.decodePreparedHistory(parts.joinToString("") { it.body })
+            }
+            BrowserHistoryTransfer(account, sessionKey, code, codeExpiry, expiry, prepared,
+                readBoolean(), readBoolean(), readLong(), text())
+        }
+    }
+    @Synchronized
+    fun save(job: BrowserHistoryTransfer) = atomic {
+        clearBrowserHistory(job.account)
+        // Keep each encrypted SQLite row below Android's CursorWindow limit.
+        val chunks = job.prepared?.let(ChatStorage::encodePreparedHistory)?.chunked(64 * 1024).orEmpty()
+        chunks.forEachIndexed { index, body ->
+            save("browser_history_chunk", "${job.account}\u0000$index") {
+                text(job.account); writeInt(index); text(body)
+            }
+        }
+        save("browser_history", job.account) {
+            text(job.account); text(job.sessionKey); text(job.code)
+            writeLong(job.codeExpiresAt); writeLong(job.expiresAt); writeInt(chunks.size)
+            writeBoolean(job.approved); writeBoolean(job.finished); writeLong(job.nextAttemptAt); text(job.error)
+        }
+    }
+    @Synchronized fun clearBrowserHistory(account: String) = atomic {
+        historyChunks().filter { it.account == account }.forEach {
+            remove("browser_history_chunk", "$account\u0000${it.index}")
+        }
+        remove("browser_history", account)
+    }
     @Synchronized
     fun sessionNotices(): Set<String> = records("session_notice") { text() }.toSet()
 
