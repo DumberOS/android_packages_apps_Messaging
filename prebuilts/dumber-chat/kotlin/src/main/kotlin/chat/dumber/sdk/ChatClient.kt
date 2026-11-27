@@ -27,7 +27,7 @@ class ChatClient internal constructor(private val config: ChatConfig, private va
     override fun verify(phone: String, code: String) = Wire.session(obj("verify", "phone" to phone, "code" to code))
     override fun requestCode(phone: String, kind: RegistrationKind) = obj("request_code", "phone" to phone, "registration_kind" to kind.name.lowercase(java.util.Locale.ROOT)).let { CodeRequest(it.getString("status"), it.getBoolean("development")) }
     override fun verify(phone: String, code: String, kind: RegistrationKind) = Wire.session(obj("verify", "phone" to phone, "code" to code, "registration_kind" to kind.name.lowercase(java.util.Locale.ROOT)))
-    override fun sessionStatus() = obj("session_status").let { SessionStatus(Wire.enum(it.getString("role")), it.getBoolean("main_active")) }
+    override fun sessionStatus() = obj("session_status").let { SessionStatus(Wire.enum(it.getString("role")), it.getBoolean("main_active"), it.optJSONObject("browser")?.let(Wire::browser)) }
     override fun reviewPairing(code: String) = Wire.pairing(obj("pairing_review", "code" to code))
     override fun approvePairing(code: String) = Wire.pairing(obj("pairing_approve", "code" to code))
     override fun startPairingVerification(code: String) = Wire.verification(obj("start_pairing_verification", "code" to code))
@@ -55,6 +55,8 @@ class ChatClient internal constructor(private val config: ChatConfig, private va
     override fun turnConfig() = obj("turn_config").let { v -> TurnConfig(v.getJSONArray("uris").let { a -> (0 until a.length()).map { a.getString(it) } }, v.getString("username"), v.getString("password"), v.getLong("ttl")) }
     override fun sendCall(conversationId: String, signal: CallSignal, transactionId: String) { call("send_call", "conversation_id" to conversationId, "signal" to CallWire.encode(signal), "transaction_id" to transactionId) }
     override fun acknowledgeCalls(eventIds: List<String>) { call("acknowledge_calls", "event_ids" to eventIds) }
+    override fun configureBrowserSms(pairingId: String, enabled: Boolean) = Wire.browser(obj("configure_browser_sms", "pairing_id" to pairingId, "enabled" to enabled))
+    override fun unpairBrowser(pairingId: String) { call("unpair_browser", "pairing_id" to pairingId) }
     override fun enableSmsSync() { call("enable_sms_sync") }
     override fun publishSms(messages: List<SmsMessage>, transactionId: String) = publishSmsBatch(messages, null, transactionId)
     override fun publishSms(messages: List<SmsMessage>, progress: SmsProgress, transactionId: String) = publishSmsBatch(messages, progress, transactionId)
@@ -71,7 +73,7 @@ class ChatClient internal constructor(private val config: ChatConfig, private va
     override fun sync() = obj("sync").let { SyncUpdate(it.getJSONArray("conversations").objects { update ->
         ConversationUpdate(Wire.conversation(update.getJSONObject("conversation")), update.getJSONArray("messages").objects(Wire::message), update.getBoolean("limited"))
     }, it.getBoolean("contacts_pending"), it.optJSONArray("calls")?.objects(CallWire::event) ?: emptyList(), it.optJSONArray("sms_requests")?.objects { v ->
-        SmsRequest(v.getString("event_id"),v.getString("request_id"),v.getString("kind"),v.getString("address"),v.getString("body"),v.getLong("created_at_ms"),v.getLong("received_at_ms"),v.optString("sim_id"),v.optString("transport")) } ?: emptyList()) }
+        SmsRequest(v.getString("event_id"),v.getString("request_id"),v.getString("kind"),v.getString("address"),v.getString("body"),v.getLong("created_at_ms"),v.getLong("received_at_ms"),v.optString("sim_id"),v.optString("transport"),v.optString("pairing_id")) } ?: emptyList()) }
     override fun devices(phone: String?) = obj("devices", "phone" to phone).let { data -> DeviceList(Wire.contact(data.getJSONObject("contact")), data.getString("current_device_id"), data.nullableString("current_device_fingerprint"), data.getJSONArray("devices").objects {
         Device(it.getString("device_id"), it.nullableString("name"), it.getBoolean("verified"), it.nullableString("fingerprint"))
     }) }

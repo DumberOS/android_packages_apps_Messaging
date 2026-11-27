@@ -19,6 +19,7 @@ internal fun JSONObject.nullableString(key: String): String? = if(isNull(key)) n
 internal fun JSONObject.nullableLong(key: String): Long? = if(isNull(key)) null else getLong(key)
 internal fun <T> JSONArray.objects(decode: (JSONObject) -> T): List<T> = (0 until length()).map { decode(getJSONObject(it)) }
 internal object Wire {
+    fun browser(v: JSONObject) = BrowserLink(v.getString("pairing_id"),v.getString("device_id"),v.getBoolean("sms_enabled"),v.nullableString("sms_room"))
     fun verification(v: JSONObject): PairingVerification {
         val numbers = v.getJSONArray("numbers")
         return PairingVerification(v.nullableString("id"), v.getString("state"), (0 until numbers.length()).map(numbers::getInt), v.getLong("expires_at"))

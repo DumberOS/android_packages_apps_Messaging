@@ -135,7 +135,8 @@ class ChatPairingActivity : ChatActivity() {
             val a = account(); val store = ChatStore.get(this); val api = ChatAccounts.client(this, a)
             if (store.browserHistory().any { it.account == a.id && it.code == code }) ChatBrowserHistory.retry(this, a, true)
             else ChatBrowserHistory.link(this, a, code, api.reviewPairing(code))
-            if (shareSms == true && !store.smsEnabled(a)) ChatSmsSync.enable(this, a)
+            val pairingId = flow ?: error("Verification interrupted. Link again.")
+            ChatSmsSync.configure(this, a, pairingId, shareSms == true)
         } }) { result -> busy = false; result.fold({ finish() }, ::failed) }
     }
 }

@@ -159,25 +159,35 @@ internal class ChatStore private constructor(context: Context) :
             text(account.status.name)
         }
         }
-    @Synchronized fun smsEnabled(account: ChatAccount): Boolean = records("sms-enabled") { text() to text() }
-        .any { it.first == account.id && it.second == ChatHistoryTransfer.sessionKey(account) }
-    @Synchronized fun enableSms(account: ChatAccount) = save("sms-enabled", account.id) { text(account.id); text(ChatHistoryTransfer.sessionKey(account)) }
+    @Synchronized fun smsLink(account: ChatAccount): String? = records("sms-enabled") {
+        Triple(text(), text(), if (available() > 0) text() else "")
+    }.find { it.first == account.id && it.second == ChatHistoryTransfer.sessionKey(account) }?.third?.takeIf { it.isNotEmpty() }
+    @Synchronized fun smsEnabled(account: ChatAccount): Boolean = smsLink(account) != null
+    @Synchronized fun enableSms(account: ChatAccount, pairingId: String) = save("sms-enabled", account.id) {
+        text(account.id); text(ChatHistoryTransfer.sessionKey(account)); text(pairingId)
+    }
+    @Synchronized fun disableSms(account: ChatAccount) {
+        remove("sms-enabled",account.id)
+        clearSmsExports(account)
+        remove("sms-snapshot",account.id + "/" + ChatHistoryTransfer.sessionKey(account))
+    }
     @Synchronized fun smsAttempts(): List<SmsAttempt> = records("sms-attempt") {
         val old = SmsAttempt(text(), text(), SmsRequest(text(), text(), text(), text(), text(), readLong(), readLong()), text(), text(), List(readInt()) { readInt() })
         val routed = if (available() == 0) old else old.copy(request = old.request.copy(simId = text(), transport = text()), matrixRoom = text(), matrixEvent = text(), matrixAccount = text())
-        if (available() == 0) routed else routed.copy(queueVersion = readInt(), subscription = readInt(), pinnedSim = text(), localId = text())
+        val queued = if (available() == 0) routed else routed.copy(queueVersion = readInt(), subscription = readInt(), pinnedSim = text(), localId = text())
+        if (available() == 0) queued else queued.copy(request = queued.request.copy(pairingId = text()))
     }
     @Synchronized fun save(v: SmsAttempt) = save("sms-attempt", v.account + "/" + v.sessionKey + "/" + v.request.requestId) {
         text(v.account);text(v.sessionKey);text(v.request.eventId);text(v.request.requestId);text(v.request.kind)
         text(v.request.address);text(v.request.body);writeLong(v.request.createdAtMs);writeLong(v.request.receivedAtMs)
         text(v.state);text(v.uri);writeInt(v.parts.size);v.parts.forEach { writeInt(it) }
         text(v.request.simId);text(v.request.transport);text(v.matrixRoom);text(v.matrixEvent);text(v.matrixAccount)
-        writeInt(v.queueVersion);writeInt(v.subscription);text(v.pinnedSim);text(v.localId)
+        writeInt(v.queueVersion);writeInt(v.subscription);text(v.pinnedSim);text(v.localId);text(v.request.pairingId)
     }
     /** Commit the request identity before either local queueing or legacy submission. */
     @Synchronized fun claimSms(v: SmsAttempt): Boolean = atomic {
         val account = account(v.account)
-        if (account?.enabled != true || ChatHistoryTransfer.sessionKey(account) != v.sessionKey || !smsEnabled(account)) return@atomic false
+        if (account?.enabled != true || ChatHistoryTransfer.sessionKey(account) != v.sessionKey || smsLink(account) != v.request.pairingId || v.request.pairingId.isEmpty()) return@atomic false
         val id = digest(v.account + "/" + v.sessionKey + "/" + v.request.requestId)
         if (writableDatabase.rawQuery("SELECT 1 FROM records WHERE kind='sms-attempt' AND id=?", arrayOf(id)).use { it.moveToFirst() }) return@atomic false
         save(v)

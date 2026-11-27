@@ -37,6 +37,8 @@ interface ChatApi {
     fun turnConfig(): TurnConfig = throw ChatException("Calling unsupported", ErrorKind.UPGRADE_REQUIRED)
     fun sendCall(conversationId: String, signal: CallSignal, transactionId: String) { throw ChatException("Calling unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun acknowledgeCalls(eventIds: List<String>) { throw ChatException("Calling unsupported", ErrorKind.UPGRADE_REQUIRED) }
+    fun configureBrowserSms(pairingId: String, enabled: Boolean): BrowserLink = throw ChatException("Browser SMS lifecycle unsupported", ErrorKind.UPGRADE_REQUIRED)
+    fun unpairBrowser(pairingId: String) { throw ChatException("Browser sign-out unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun enableSmsSync() { throw ChatException("SMS sync unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun publishSms(messages: List<SmsMessage>, transactionId: String) { throw ChatException("SMS sync unsupported", ErrorKind.UPGRADE_REQUIRED) }
     fun publishSms(messages: List<SmsMessage>, progress: SmsProgress, transactionId: String) { throw ChatException("History progress unsupported", ErrorKind.UPGRADE_REQUIRED) }

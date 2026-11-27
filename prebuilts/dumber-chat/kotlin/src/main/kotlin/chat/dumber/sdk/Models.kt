@@ -43,7 +43,8 @@ data class SyncUpdate(val conversations: List<ConversationUpdate>, val contactsP
 data class SentMessage(val eventId: String, val encrypted: Boolean)
 data class RecipientStatus(val availability: Availability, val contact: Contact? = null, val retryAtMs: Long = 0)
 data class CodeRequest(val status: String, val development: Boolean)
-data class SessionStatus(val role: SessionRole, val mainActive: Boolean)
+data class BrowserLink(val pairingId: String, val deviceId: String, val smsEnabled: Boolean, val smsRoom: String?)
+data class SessionStatus(val role: SessionRole, val mainActive: Boolean, val browser: BrowserLink? = null)
 data class PairingReview(val description: String, val expiresAt: Long, val approved: Boolean,
     val pairingId: String? = null, val historyPublicKey: String? = null)
 data class HistoryConversation(val conversation: Conversation, val messages: List<Message>)
@@ -65,7 +66,7 @@ class TurnConfig(val uris: List<String>, val username: String, val password: Str
 }
 
 /** Commands are bound to the current device channel; hosts must durably claim before sending. */
-data class SmsRequest @JvmOverloads constructor(val eventId: String, val requestId: String, val kind: String, val address: String, val body: String, val createdAtMs: Long, val receivedAtMs: Long, val simId: String = "", val transport: String = "")
+data class SmsRequest @JvmOverloads constructor(val eventId: String, val requestId: String, val kind: String, val address: String, val body: String, val createdAtMs: Long, val receivedAtMs: Long, val simId: String = "", val transport: String = "", val pairingId: String = "")
 data class SmsMessage @JvmOverloads constructor(val id: String, val address: String, val body: String, val timestampMs: Long, val incoming: Boolean, val status: String, val name: String = "", val deleted: Boolean = false, val simId: String = "", val transport: String = "sms", val matrixEventId: String = "", val matrixRoomId: String = "", val matrixAccount: String = "")
 
 data class SmsSim(val id: String, val label: String, val phone: String, val accountId: String)

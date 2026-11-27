@@ -15,15 +15,30 @@ internal object ChatSmsSync {
     private val publishLocks = Array(16) { Any() }
     private fun publishLock(id: String) = publishLocks[(id.hashCode() and Int.MAX_VALUE) % publishLocks.size]
     private fun lock(id: String) = locks[(id.hashCode() and Int.MAX_VALUE) % locks.size]
-    fun enable(context: Context, account: ChatAccount) {
-      synchronized(lock(account.id)) {
-        check(ChatAccounts.isDefault(context)) { "Messaging must be the default SMS app" }
-        val store = ChatStore.get(context)
-        check(current(store, account)) { "Account changed" }
-        ChatAccounts.client(context, account).enableSmsSync()
-        store.atomic { check(current(store, account)); store.enableSms(account); store.clearSmsExports(account); store.startSmsSnapshot(account) }
-      }
-        publish(context, account)
+    fun configure(context: Context, account: ChatAccount, pairingId: String, enabled: Boolean) {
+        synchronized(publishLock(account.id)) { synchronized(lock(account.id)) {
+            check(ChatAccounts.isDefault(context)) { "Messaging must be the default SMS app" }
+            val store = ChatStore.get(context)
+            check(current(store, account)) { "Account changed" }
+            val link = ChatAccounts.client(context, account).configureBrowserSms(pairingId, enabled)
+            applyLink(store,account,link)
+        } }
+        if (enabled) publish(context,account)
+    }
+    private fun applyLink(store: ChatStore, account: ChatAccount, link: BrowserLink?) = store.atomic {
+        check(current(store,account)) { "Account changed" }
+        val id = link?.takeIf { it.smsEnabled && it.smsRoom != null }?.pairingId
+        if (id == null) store.disableSms(account)
+        else if (store.smsLink(account) != id) {
+            store.disableSms(account)
+            store.enableSms(account,id)
+            store.startSmsSnapshot(account)
+        }
+    }
+    private fun refreshLink(context: Context, account: ChatAccount): BrowserLink? {
+        val link = ChatAccounts.client(context,account).sessionStatus().browser
+        applyLink(ChatStore.get(context),account,link)
+        return link
     }
     private fun current(store: ChatStore, account: ChatAccount) = store.account(account.id)?.let {
         it.enabled && it.session.credentials == account.session.credentials
@@ -37,6 +52,7 @@ internal object ChatSmsSync {
         if (!current(store, account) || !store.smsEnabled(account) || !ChatAccounts.isDefault(context)) return@synchronized
         val api = ChatAccounts.client(context, account)
         for (request in requests) {
+            if (request.pairingId.isEmpty() || request.pairingId != store.smsLink(account)) { api.acknowledgeSms(listOf(request.eventId)); continue }
             if (request.kind == "snapshot_request") {
                 // Also deduplicate snapshot requests; never clear the send-attempt ledger.
                 val marker = SmsAttempt(account.id, ChatHistoryTransfer.sessionKey(account), request, "snapshot")
@@ -107,6 +123,9 @@ internal object ChatSmsSync {
         val account = store.account(attempt.account) ?: return "failed"
         if (!current(store,account) || ChatHistoryTransfer.sessionKey(account) != attempt.sessionKey ||
                 !store.smsEnabled(account) || !ChatAccounts.isDefault(context) || !ChatPolicy.allowed(context,attempt.request.address)) return "failed"
+        // A durable request belongs to one browser link. Re-linking never revives it.
+        val link = runCatching { ChatAccounts.client(context,account).sessionStatus().browser }.getOrNull()
+        if (link?.smsEnabled != true || link.smsRoom == null || link.pairingId != attempt.request.pairingId) return "failed"
         val sim = ChatAccounts.selected(context,attempt.subscription) ?: return "failed"
         return if (ChatSmsPolicy.simId(sim,ChatAccounts.forSim(context,sim)) == attempt.pinnedSim) "" else "failed"
     }
@@ -239,9 +258,11 @@ internal object ChatSmsSync {
 
     fun publish(context: Context, account: ChatAccount) = synchronized(publishLock(account.id)) publishing@ {
         val store = ChatStore.get(context)
-        if (!current(store, account) || !store.smsEnabled(account)) return@publishing
+        if (!current(store, account)) return@publishing
+        synchronized(lock(account.id)) { refreshLink(context,account) }
+        if (!store.smsEnabled(account)) return@publishing
         val (snapshot, exports) = synchronized(lock(account.id)) {
-            attempts(store,account).filter { it.queueVersion == 1 && it.localId.isEmpty() && it.state in listOf("unknown","sending") }
+            attempts(store,account).filter { it.queueVersion == 1 && it.request.pairingId == store.smsLink(account) && it.localId.isEmpty() && it.state in listOf("unknown","sending") }
                 .forEach { prepareQueue(context,account,it) }
             val snapshot = store.smsSnapshot(account) ?: store.startSmsSnapshot(account)
             snapshot to store.smsExports().filter { it.account == account.id && it.sessionKey == ChatHistoryTransfer.sessionKey(account) }.associateBy { it.id }
@@ -293,7 +314,7 @@ internal object ChatSmsSync {
                     matrixRoomId = matrix.getOrNull(1).orEmpty(), matrixAccount = matrix.getOrNull(0).orEmpty())
             }
         } ?: error("Cannot read SMS history")
-        for (job in jobs) if ("request:${job.request.requestId}" !in messages && job.uri.isEmpty()) {
+        for (job in jobs) if (job.request.pairingId == store.smsLink(account) && "request:${job.request.requestId}" !in messages && job.uri.isEmpty()) {
             val r = job.request
             messages["request:${r.requestId}"] = SmsMessage("request:${r.requestId}", r.address, r.body, r.createdAtMs, false, status(job), name(r.address), simId = r.simId, transport = r.transport.ifEmpty { "sms" },
                 matrixEventId = job.matrixEvent, matrixRoomId = job.matrixRoom, matrixAccount = job.matrixAccount)

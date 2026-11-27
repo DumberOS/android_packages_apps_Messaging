@@ -48,6 +48,18 @@ SMS sharing and history export only after state `verified`. The SDK binds the
 target to the approved pairing and persists Matrix device trust. An interrupted
 or expired flow requires re-linking, not automatic confirmation.
 
+After verification, pass its pairing ID and the user's Yes/No choice to
+`configureBrowserSms(pairingId, enabled)`. `SessionStatus.browser` identifies the
+single current browser and authorized SMS room. Each returned `SmsRequest`
+carries a `pairingId`; hosts must persist it with the durable send ledger and
+check it against the current enabled grant before carrier submission. Unpairing
+clears the SDK's old room and request inbox; retain host deduplication tombstones.
+The legacy `enableSmsSync()` only adopts existing consent and cannot grant it.
+Use `unpairBrowser(pairingId)` to sign out the displayed browser from its main
+phone. It rejects a stale pairing ID if a different browser has since linked;
+the phone's registration stays active. Drive the Link/Sign out button from
+`sessionStatus().browser`, rather than a completed history-copy record.
+
 After `reviewPairing` and the user's confirmation, supply the host's local records
 as `List<HistoryConversation>` to `preparePairingHistory(review, conversations)`.
 This encrypts up to 8 MiB of confirmed readable text plus conversation metadata

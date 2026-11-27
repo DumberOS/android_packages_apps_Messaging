@@ -151,8 +151,8 @@ public class ChatStorageTest extends AndroidTestCase {
     public void testSmsClaimSurvivesRestartConcurrentReplayAndRegistrationReplacement() throws Exception {
         Session session = new Session("sms-credential", "sms-account", "sms-device", "+46123456789");
         ChatAccount account = new ChatAccount(session, "+46123456789", 3, 42, null, "SIM", "sms-crypto", "password", 123L, AccountStatus.CONNECTED);
-        store.save(account); store.enableSms(account);
-        SmsRequest request = new SmsRequest("event", "12345678-1234-1234-1234-123456789012", "send", "+46987654321", "test", 1000L, 1000L);
+        store.save(account); store.enableSms(account, "browser-link");
+        SmsRequest request = new SmsRequest("event", "12345678-1234-1234-1234-123456789012", "send", "+46987654321", "test", 1000L, 1000L, "", "sms", "browser-link");
         SmsAttempt attempt = new SmsAttempt(account.getId(), ChatHistoryTransfer.INSTANCE.sessionKey(account), request, "unknown", "", Collections.emptyList());
         java.util.concurrent.atomic.AtomicInteger claims = new java.util.concurrent.atomic.AtomicInteger();
         java.util.List<Thread> workers = new java.util.ArrayList<>();
@@ -162,6 +162,13 @@ public class ChatStorageTest extends AndroidTestCase {
         store.close(); // Reopen the actual SQLite database, as after process death.
         assertFalse(store.claimSms(attempt));
         assertEquals("unknown", store.smsAttempts().get(0).getState());
+        assertEquals("browser-link", store.smsAttempts().get(0).getRequest().getPairingId());
+        store.disableSms(account);
+        assertFalse(store.smsEnabled(account));
+        assertFalse(store.claimSms(attempt));
+        store.enableSms(account,"fresh-link");
+        assertFalse(store.claimSms(attempt));
+        assertEquals(1,store.smsAttempts().size()); // Unpairing retains replay tombstones.
         store.save(new ChatAccount(new Session("replacement", "sms-account", "new-device", null), "+46123456789", 3, 42, null, "SIM", "new-crypto", "password", 456L, AccountStatus.CONNECTED));
         assertFalse(store.claimSms(attempt));
         assertEquals(1, store.smsAttempts().size());

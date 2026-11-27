@@ -14,6 +14,56 @@ import com.android.messaging.ui.UIIntents
 
 class ChatSettingsActivity : ChatActivity() {
     private var rendered: Any? = null
+    private var active = false
+    private var browserBusy = false
+    private var browserRevision = 0
+    private var browserNextCheck = 0L
+    private var browserLinks: Map<String, BrowserLink?> = emptyMap()
+    private val browserRefresh = Runnable { refresh() }
+    private fun browserKey(account: ChatAccount) = account.id + ":" + ChatHistoryTransfer.sessionKey(account)
+
+    override fun onResume() {
+        active = true
+        browserNextCheck = 0
+        super.onResume()
+    }
+
+    private fun refreshBrowserLinks() {
+        if (!active || browserBusy || android.os.SystemClock.elapsedRealtime() < browserNextCheck) return
+        browserBusy = true
+        val revision = browserRevision
+        DumberChat.task(this, {
+            ChatStore.get(this).accounts().filter { it.enabled }.associate { account ->
+                browserKey(account) to runCatching { ChatAccounts.client(this,account).sessionStatus().browser }
+            }
+        }) { results ->
+            browserBusy = false
+            if (revision == browserRevision) {
+                browserLinks = browserLinks.filterKeys { it in results }.toMutableMap().apply {
+                    results.forEach { (key,result) -> if (result.isSuccess) put(key,result.getOrNull()) }
+                }
+                browserNextCheck = android.os.SystemClock.elapsedRealtime() + 5_000
+            }
+            if (active) {
+                refresh()
+                timer.removeCallbacks(browserRefresh)
+                timer.postDelayed(browserRefresh,5_000)
+            }
+        }
+    }
+
+    private fun signOutBrowser(account: ChatAccount, link: BrowserLink) {
+        operation {
+            ChatAccounts.client(this,account).unpairBrowser(link.pairingId)
+            ChatBrowserHistory.cancel(this,account.id)
+            ChatStore.get(this).disableSms(account)
+            runOnUiThread {
+                browserRevision++
+                browserNextCheck = 0
+                browserLinks = browserLinks + (browserKey(account) to null)
+            }
+        }
+    }
     private var generation = 0
     private var activating = false
     private var manualNumber = false
@@ -50,6 +100,9 @@ class ChatSettingsActivity : ChatActivity() {
     }
 
     override fun onPause() {
+        active = false
+        browserRevision++
+        timer.removeCallbacks(browserRefresh)
         timer.removeCallbacks(expire)
         generation++
         super.onPause()
@@ -61,6 +114,7 @@ class ChatSettingsActivity : ChatActivity() {
     }
 
     override fun refresh() {
+        refreshBrowserLinks()
         val request = ++generation
         DumberChat.task(
             this,
@@ -114,7 +168,8 @@ class ChatSettingsActivity : ChatActivity() {
             }
             if (step == ActivationStep.ACCOUNTS) error = null
             val isDefaultSmsApp = ChatAccounts.isDefault(this)
-            val key = listOf(state, step, working, error, isDefaultSmsApp)
+            val key = listOf(state, step, working, error, isDefaultSmsApp, browserLinks,
+                browserBusy && state.accounts.any { it.enabled && !browserLinks.containsKey(browserKey(it)) })
             if (rendered == key) return@task
             rendered = key
             content.removeAllViews()
@@ -396,12 +451,19 @@ class ChatSettingsActivity : ChatActivity() {
             .filter { it.enabled }
             .forEach { account ->
                 content.label("${account.simLabel} · ${account.phone} · Connected")
-                content.button("Link a browser") { pair(account.id) }
-                state.history.find { it.account == account.id }?.let { job ->
-                    content.label(when {
-                        job.finished && job.error.isNotEmpty() -> "Browser history: ${job.error}"
-                        job.finished -> "Browser linked. History sent."
-                        job.approved -> "Browser linked. Copying history… ${job.error}"
+                val key = browserKey(account)
+                val browser = browserLinks[key]
+                when {
+                    browser != null -> content.button("Sign out browser") { signOutBrowser(account,browser) }
+                    browserLinks.containsKey(key) -> content.button("Link browser") { pair(account.id) }
+                    else -> content.button(if (browserBusy) "Checking browser…" else "Check browser link") {
+                        browserNextCheck = 0; redraw()
+                    }.apply { isEnabled = !browserBusy }
+                }
+                if (browser != null) state.history.find { it.account == account.id }?.let { job ->
+                    if (!job.finished || job.error.isNotEmpty()) content.label(when {
+                        job.finished -> "Browser history: ${job.error}"
+                        job.approved -> "Copying history… ${job.error}"
                         else -> "Linking browser… ${job.error}"
                     })
                     if (!job.finished) {
@@ -466,7 +528,7 @@ class ChatSettingsActivity : ChatActivity() {
             ) { (account, review) ->
                 confirm(
                     "Approve browser?",
-                    review.description + "\nOnly approve the browser you are linking." +
+                    review.description + "\nOnly approve the browser you are linking. This replaces any previously linked browser." +
                         if (review.historyPublicKey != null) "\nSaved encrypted chats and their contact names will be copied to this browser." else ""
                 ) {
                     startActivity(android.content.Intent(this, ChatPairingActivity::class.java).putExtra("account", account.id).putExtra("code", code))
